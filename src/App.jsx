@@ -647,95 +647,105 @@ function FinanceApp({ user }) {
               ))}
             </div>
 
-            {/* 요일 헤더 */}
-            <div style={{ display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:2 }}>
-              {WEEKDAYS.map((d,i)=>{
-                const isSun=(weekStart===1&&i===6)||(weekStart===0&&i===0);
-                const isSat=(weekStart===1&&i===5)||(weekStart===0&&i===6);
-                return <div key={d} style={{ textAlign:"center",padding:"7px 0",fontSize:15,fontWeight:700,color:isSun?T.danger:isSat?T.warn:T.muted }}>{d}</div>;
-              })}
-            </div>
-
-            {/* 날짜 그리드 */}
-            <div style={{ display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2 }}>
-              {Array.from({length:firstDay},(_,i)=><div key={"e"+i}/>)}
-              {Array.from({length:daysInMonth},(_,i)=>{
-                const d = i+1;
-                const evs = calEvents[d]||[];
-                const isTod = isToday(d);
-                const dow = getDow(d);
-                const isSun=dow===0, isSat=dow===6;
-                const isSel = selectedDay===d;
-                const hasMemo = evs.some(e=>e.type==="memo");
-                return (
-                  <div key={d} onClick={()=>setSelectedDay(isSel?null:d)} style={{
-                    minHeight:164,padding:"5px 5px 4px",borderRadius:7,cursor:"pointer",
-                    background:isTod?(dark?"#141D35":"#EFF6FF"):isSel?(dark?"#0D1A2E":"#F0F7FF"):isSun?(dark?"#18080A":"#FFF5F5"):isSat?(dark?"#180F00":"#FFFBF0"):T.bg2,
-                    border:`1.5px solid ${isTod?T.acc:isSel?T.border2:isSun?(dark?"#3B0A0A":"#FDD"):isSat?(dark?"#3B2200":"#FFE"):(T.border)}`,
-                    transition:"all 0.12s",position:"relative"
-                  }}>
-                    <div style={{ fontSize:15,fontWeight:isTod?800:400,marginBottom:3,color:isTod?T.acc:isSun?T.danger:isSat?T.warn:T.muted }}>
-                      {isTod ? <span style={{ background:T.acc,color:"#fff",borderRadius:4,padding:"1px 5px",fontSize:15 }}>오늘</span> : d}
-                      {hasMemo && <span style={{ marginLeft:3,fontSize:13,color:T.ok }}>✎</span>}
-                    </div>
-                    {evs.slice(0,3).map((ev,ei)=>(
-                      <div key={ei} style={{ fontSize:13,padding:"2px 4px",borderRadius:3,marginBottom:2,background:ev.color+"28",border:`1px solid ${ev.color}55`,color:ev.color,lineHeight:1.4,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis" }}>
-                        {ev.icon} {ev.label}
-                      </div>
-                    ))}
-                    {evs.length>3 && <div style={{ fontSize:13,color:T.muted,paddingLeft:2 }}>+{evs.length-3}건</div>}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* 선택된 날짜 상세 패널 */}
-            {selectedDay && (
-              <div style={{ marginTop:12,background:T.bg2,border:`1px solid ${T.border}`,borderRadius:14,padding:16 }}>
-                <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12 }}>
-                  <div style={{ fontSize:15,fontWeight:800,color:T.text }}>
-                    {calYear}년 {calMonth+1}월 {selectedDay}일
-                    {getDow(selectedDay)===6&&<span style={{ fontSize:11,color:T.warn,marginLeft:8 }}>토요일</span>}
-                    {getDow(selectedDay)===0&&<span style={{ fontSize:11,color:T.danger,marginLeft:8 }}>일요일</span>}
-                  </div>
-                  <div style={{ display:"flex",gap:8,alignItems:"center" }}>
-                    {(calEvents[selectedDay]||[]).length>0 && (
-                      <div style={{ ...numFont,fontSize:13,fontWeight:700,color:T.danger }}>
-                        지출 ₩{fmt((calEvents[selectedDay]||[]).filter(e=>!(e.type==="memo"&&e.icon==="💚")).reduce((s,e)=>s+e.amount,0))}
-                      </div>
-                    )}
-                    <button onClick={()=>setShowMemoModal(true)} style={{ background:T.ok,color:"#fff",border:"none",borderRadius:8,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer" }}>+ 수입/지출 추가</button>
-                  </div>
+            {/* 캘린더 + 사이드 패널 래퍼 */}
+            <div style={{ display:"flex",gap:12,alignItems:"flex-start" }}>
+              {/* 캘린더 본체 */}
+              <div style={{ flex:1,minWidth:0 }}>
+                {/* 요일 헤더 */}
+                <div style={{ display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:2 }}>
+                  {WEEKDAYS.map((d,i)=>{
+                    const isSun=(weekStart===1&&i===6)||(weekStart===0&&i===0);
+                    const isSat=(weekStart===1&&i===5)||(weekStart===0&&i===6);
+                    return <div key={d} style={{ textAlign:"center",padding:"7px 0",fontSize:15,fontWeight:700,color:isSun?T.danger:isSat?T.warn:T.muted }}>{d}</div>;
+                  })}
                 </div>
-                {(calEvents[selectedDay]||[]).length===0 && <div style={{ textAlign:"center",color:T.muted,fontSize:13,padding:"20px 0" }}>이 날 일정이 없습니다. 수입/지출을 직접 추가해보세요!</div>}
-                <div style={{ display:"flex",flexDirection:"column",gap:7 }}>
-                  {(calEvents[selectedDay]||[]).map((ev,i)=>(
-                    <div key={i} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 14px",background:dark?"#070B18":T.bg3,borderRadius:10,borderLeft:`4px solid ${ev.color}` }}>
-                      <div>
-                        <div style={{ fontSize:13,fontWeight:700,color:T.text }}>{ev.icon} {ev.fullLabel||ev.label}</div>
-                        <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{ev.detail}</div>
-                        {ev.balance!==undefined&&ev.type!=="memo" && <div style={{ fontSize:10,color:T.muted,marginTop:1,...numFont }}>잔액 ₩{fmt(ev.balance)}</div>}
-                      </div>
-                      <div style={{ display:"flex",alignItems:"center",gap:10 }}>
-                        <div style={{ textAlign:"right" }}>
-                          <div style={{ fontSize:15,fontWeight:900,color:ev.type==="memo"&&ev.icon==="💚"?T.ok:ev.color,...numFont }}>
-                            {ev.type==="memo"&&ev.icon==="💚"?"+":"-"}₩{fmt(ev.amount)}
-                          </div>
+
+                {/* 날짜 그리드 */}
+                <div style={{ display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2 }}>
+                  {Array.from({length:firstDay},(_,i)=><div key={"e"+i}/>)}
+                  {Array.from({length:daysInMonth},(_,i)=>{
+                    const d = i+1;
+                    const evs = calEvents[d]||[];
+                    const isTod = isToday(d);
+                    const dow = getDow(d);
+                    const isSun=dow===0, isSat=dow===6;
+                    const isSel = selectedDay===d;
+                    const hasMemo = evs.some(e=>e.type==="memo");
+                    return (
+                      <div key={d} onClick={()=>setSelectedDay(isSel?null:d)} style={{
+                        minHeight:164,padding:"5px 5px 4px",borderRadius:7,cursor:"pointer",
+                        background:isTod?(dark?"#141D35":"#EFF6FF"):isSel?(dark?"#0D1A2E":"#F0F7FF"):isSun?(dark?"#18080A":"#FFF5F5"):isSat?(dark?"#180F00":"#FFFBF0"):T.bg2,
+                        border:`1.5px solid ${isTod?T.acc:isSel?T.border2:isSun?(dark?"#3B0A0A":"#FDD"):isSat?(dark?"#3B2200":"#FFE"):(T.border)}`,
+                        transition:"all 0.12s",position:"relative"
+                      }}>
+                        <div style={{ fontSize:15,fontWeight:isTod?800:400,marginBottom:3,color:isTod?T.acc:isSun?T.danger:isSat?T.warn:T.muted }}>
+                          {isTod ? <span style={{ background:T.acc,color:"#fff",borderRadius:4,padding:"1px 5px",fontSize:15 }}>오늘</span> : d}
+                          {hasMemo && <span style={{ marginLeft:3,fontSize:13,color:T.ok }}>✎</span>}
                         </div>
-                        {ev.type==="memo" && (
-                          <button onClick={()=>{
-                            const key=`${calYear}-${String(calMonth+1).padStart(2,"0")}-${String(selectedDay).padStart(2,"0")}`;
-                            const nm={...memos,[key]:(memos[key]||[]).filter(m=>m.id!==ev.id)};
-                            if(!nm[key].length) delete nm[key];
-                            setMemos(nm); saveMemos(nm);
-                          }} style={{ background:"none",border:`1px solid ${T.danger}`,borderRadius:6,padding:"3px 7px",fontSize:11,color:T.danger,cursor:"pointer" }}>삭제</button>
-                        )}
+                        {evs.slice(0,3).map((ev,ei)=>(
+                          <div key={ei} style={{ fontSize:13,padding:"2px 4px",borderRadius:3,marginBottom:2,background:ev.color+"28",border:`1px solid ${ev.color}55`,color:ev.color,lineHeight:1.4,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis" }}>
+                            {ev.icon} {ev.label}
+                          </div>
+                        ))}
+                        {evs.length>3 && <div style={{ fontSize:13,color:T.muted,paddingLeft:2 }}>+{evs.length-3}건</div>}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
-            )}
+
+              {/* 오른쪽 사이드 패널 */}
+              <div style={{ width:300,flexShrink:0,position:"sticky",top:80 }}>
+                {selectedDay ? (
+                  <div style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:14,padding:16 }}>
+                    <div style={{ marginBottom:12 }}>
+                      <div style={{ fontSize:15,fontWeight:800,color:T.text }}>
+                        {calYear}년 {calMonth+1}월 {selectedDay}일
+                        {getDow(selectedDay)===6&&<span style={{ fontSize:11,color:T.warn,marginLeft:6 }}>토</span>}
+                        {getDow(selectedDay)===0&&<span style={{ fontSize:11,color:T.danger,marginLeft:6 }}>일</span>}
+                      </div>
+                      {(calEvents[selectedDay]||[]).length>0 && (
+                        <div style={{ ...numFont,fontSize:12,color:T.danger,marginTop:4 }}>
+                          지출 ₩{fmt((calEvents[selectedDay]||[]).filter(e=>!(e.type==="memo"&&e.icon==="💚")).reduce((s,e)=>s+e.amount,0))}
+                        </div>
+                      )}
+                    </div>
+                    <button onClick={()=>setShowMemoModal(true)} style={{ width:"100%",background:T.ok,color:"#fff",border:"none",borderRadius:8,padding:"8px",fontSize:12,fontWeight:700,cursor:"pointer",marginBottom:12 }}>+ 수입/지출 추가</button>
+                    {(calEvents[selectedDay]||[]).length===0 && <div style={{ textAlign:"center",color:T.muted,fontSize:12,padding:"16px 0" }}>이 날 일정이 없습니다.</div>}
+                    <div style={{ display:"flex",flexDirection:"column",gap:6,maxHeight:500,overflowY:"auto" }}>
+                      {(calEvents[selectedDay]||[]).map((ev,i)=>(
+                        <div key={i} style={{ padding:"10px 12px",background:dark?"#070B18":T.bg3,borderRadius:10,borderLeft:`4px solid ${ev.color}` }}>
+                          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start" }}>
+                            <div style={{ flex:1,minWidth:0 }}>
+                              <div style={{ fontSize:12,fontWeight:700,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{ev.icon} {ev.fullLabel||ev.label}</div>
+                              <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{ev.detail}</div>
+                              {ev.balance!==undefined&&ev.type!=="memo"&&<div style={{ fontSize:10,color:T.muted,marginTop:1,...numFont }}>잔액 ₩{fmt(ev.balance)}</div>}
+                            </div>
+                            <div style={{ display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,marginLeft:8 }}>
+                              <div style={{ fontSize:13,fontWeight:900,color:ev.type==="memo"&&ev.icon==="💚"?T.ok:ev.color,...numFont }}>
+                                {ev.type==="memo"&&ev.icon==="💚"?"+":"-"}₩{fmt(ev.amount)}
+                              </div>
+                              {ev.type==="memo"&&(
+                                <button onClick={()=>{
+                                  const key=`${calYear}-${String(calMonth+1).padStart(2,"0")}-${String(selectedDay).padStart(2,"0")}`;
+                                  const nm={...memos,[key]:(memos[key]||[]).filter(m=>m.id!==ev.id)};
+                                  if(!nm[key].length) delete nm[key];
+                                  setMemos(nm); saveMemos(nm);
+                                }} style={{ background:"none",border:`1px solid ${T.danger}`,borderRadius:5,padding:"2px 6px",fontSize:10,color:T.danger,cursor:"pointer" }}>삭제</button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:14,padding:20,textAlign:"center",color:T.muted,fontSize:13 }}>
+                    날짜를 클릭하면<br/>상세 내역이 표시됩니다
+                  </div>
+                )}
+              </div>
+            </div>
 
             {/* ─── 달력 하단 가계부 테이블 ─── */}
             <div style={{ marginTop:14,background:T.bg2,border:`1px solid ${T.border}`,borderRadius:14,overflow:"hidden" }}>

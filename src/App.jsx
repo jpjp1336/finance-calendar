@@ -117,7 +117,7 @@ const OWNER_CARDS = [
   { id:1772865082800,    company:"KB국민카드", limit:20000000, payDay:20, billing:5325390, color:"#d97706" },
   { id:1772865111030,    company:"씨티카드",   limit:30000000, payDay:20, billing:0,       color:"#2563eb" },
   { id:1772865154382,    company:"롯데카드",   limit:50000000, payDay:14, billing:8360890, color:"#dc2626" },
-  { id:1772865199536,    company:"우리카드",   limit:20000000, payDay:14, billing:0,       color:"#2563eb" },
+  { id:1772865199536,    company:"우리카드",   limit:20000000, payDay:14, billing:4017046, color:"#2563eb" },
   { id:1772865317906,    company:"NH농협카드", limit:13000000, payDay:14, billing:110890,  color:"#0891b2" },
   { id:1772865460949,    company:"KJ광주카드", limit:14000000, payDay:15, billing:452680,  color:"#db2777" },
 ];
@@ -1137,15 +1137,15 @@ function FinanceApp({ user }) {
         {tab==="계좌 관리" && (
           <div className="fu">
             {/* 요약 카드 */}
-            <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:14 }}>
+            <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:14 }}>
               {[
-                {l:"💰 총 잔액",   v:accounts.reduce((s,a)=>s+a.balance,0), c:T.ok},
-                {l:"🏦 계좌 수",   v:accounts.length+"개",                   c:T.acc, isStr:true},
-                {l:"📊 이번달 지출",v:monthTotal.total,                       c:T.danger},
+                {l:"💰 총 잔액",    v:"₩ "+fmt(accounts.reduce((s,a)=>s+a.balance,0)), c:T.ok},
+                {l:"🏦 계좌 수",    v:accounts.length+"개",                              c:T.acc},
+                {l:"📊 이번달 지출", v:"₩ "+fmt(monthTotal.total),                       c:T.danger},
               ].map((s,i)=>(
-                <div key={i} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:12,padding:"14px 16px" }}>
-                  <div style={{ fontSize:11,color:T.muted,marginBottom:6 }}>{s.l}</div>
-                  <div style={{ fontSize:18,fontWeight:400,color:s.c,...numFont }}>{s.isStr?s.v:"₩"+fmt(s.v)}</div>
+                <div key={i} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:10,padding:"16px 18px",boxShadow:"0 1px 3px rgba(0,0,0,0.05)" }}>
+                  <div style={{ fontSize:11,color:T.muted,fontWeight:600,marginBottom:8 }}>{s.l}</div>
+                  <div style={{ fontSize:22,fontWeight:700,color:s.c }}>{s.v}</div>
                 </div>
               ))}
             </div>

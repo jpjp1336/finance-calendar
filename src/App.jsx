@@ -416,15 +416,15 @@ function LoanModal({ loan, T, onSave, onClose }) {
 }
 
 // ─── 고정비 모달 ──────────────────────────────────────────────
-function CostModal({ T, onSave, onClose }) {
+function CostModal({ T, cost, onSave, onClose }) {
   const COLORS = ["#10B981","#3B82F6","#F59E0B","#8B5CF6","#EC4899","#EF4444","#F97316","#14B8A6"];
-  const [form, setForm] = useState({ name:"",payDay:"",amount:"",category:"기타" });
-  const [color, setColor] = useState(COLORS[0]);
+  const [form, setForm] = useState({ name:cost?.name||"", payDay:cost?.payDay||"", amount:cost?.amount||"", category:cost?.category||"기타" });
+  const [color, setColor] = useState(cost?.color||COLORS[0]);
   const inp = { width:"100%", background:T.inp, border:`1px solid ${T.border}`, borderRadius:8, padding:"10px 12px", color:T.text, fontSize:13, boxSizing:"border-box", fontFamily:"inherit" };
   return (
     <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000 }} onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:16,padding:24,width:"min(400px,95vw)" }}>
-        <div style={{ fontSize:16,fontWeight:900,color:T.text,marginBottom:16 }}>🏢 고정비 항목 추가</div>
+        <div style={{ fontSize:16,fontWeight:900,color:T.text,marginBottom:16 }}>{cost?"✏️ 고정비 수정":"🏢 고정비 항목 추가"}</div>
         <div style={{ marginBottom:12 }}><div style={{ fontSize:11,color:T.muted,fontWeight:700,marginBottom:5 }}>항목명</div><input style={inp} placeholder="예: 사무실 임대료" value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}/></div>
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12 }}>
           <div><div style={{ fontSize:11,color:T.muted,fontWeight:700,marginBottom:5 }}>납부일</div><input style={inp} type="number" min="1" max="31" placeholder="5" value={form.payDay} onChange={e=>setForm(f=>({...f,payDay:e.target.value}))}/></div>
@@ -443,7 +443,7 @@ function CostModal({ T, onSave, onClose }) {
         </div>
         <div style={{ display:"flex",gap:10,justifyContent:"flex-end" }}>
           <button onClick={onClose} style={{ background:"none",border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 18px",fontSize:13,fontWeight:700,cursor:"pointer",color:T.sub }}>취소</button>
-          <button onClick={()=>{if(!form.name||!form.payDay||!form.amount)return alert("모두 입력해주세요!");onSave({id:Date.now(),name:form.name,payDay:Number(form.payDay),amount:Number(form.amount),color,category:form.category});}} style={{ background:T.ok,color:"#fff",border:"none",borderRadius:8,padding:"10px 18px",fontSize:13,fontWeight:700,cursor:"pointer" }}>저장</button>
+          <button onClick={()=>{if(!form.name||!form.payDay||!form.amount)return alert("모두 입력해주세요!");onSave({id:cost?.id||Date.now(),name:form.name,payDay:Number(form.payDay),amount:Number(form.amount),color,category:form.category});}} style={{ background:T.ok,color:"#fff",border:"none",borderRadius:8,padding:"10px 18px",fontSize:13,fontWeight:700,cursor:"pointer" }}>저장</button>
         </div>
       </div>
     </div>
@@ -481,6 +481,7 @@ function FinanceApp({ user }) {
   const [showMemoModal, setShowMemoModal] = useState(false);
   const [showCardModal, setShowCardModal] = useState(false);
   const [showCostModal, setShowCostModal] = useState(false);
+  const [editCost, setEditCost] = useState(null);
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [editCard, setEditCard]     = useState(null);
   const [editAccount, setEditAccount] = useState(null);
@@ -690,6 +691,7 @@ function FinanceApp({ user }) {
           onClose={()=>{setShowCardModal(false);setEditCard(null);}}/>
       )}
       {showCostModal && <CostModal T={T} onSave={c=>{updateCosts(p=>[...p,c]);setShowCostModal(false);}} onClose={()=>setShowCostModal(false)}/>}
+      {editCost && <CostModal T={T} cost={editCost} onSave={c=>{updateCosts(p=>p.map(x=>x.id===c.id?c:x));setEditCost(null);}} onClose={()=>setEditCost(null)}/>}
       {(showLoanModal||editLoan) && (
         <LoanModal loan={editLoan} T={T}
           onSave={l=>{
@@ -967,7 +969,7 @@ function FinanceApp({ user }) {
               </div>
             ))}
             <div style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:14,padding:16,marginBottom:12 }}>
-              <div style={{ fontSize:13,fontWeight:800,color:T.text,marginBottom:12 }}>{calYear}년 {calMonth+1}월 지출 구성</div>
+              <div style={{ fontSize:15,fontWeight:800,color:T.text,marginBottom:12 }}>{calYear}년 {calMonth+1}월 지출 구성</div>
               {[
                 {l:"💳 카드 결제",  v:monthTotal.card, c:T.acc},
                 {l:"🏦 대출 납부",  v:monthTotal.loan, c:"#A78BFA"},
@@ -975,8 +977,8 @@ function FinanceApp({ user }) {
               ].map(item=>(
                 <div key={item.l} style={{ marginBottom:10 }}>
                   <div style={{ display:"flex",justifyContent:"space-between",marginBottom:4 }}>
-                    <span style={{ fontSize:12,color:T.sub }}>{item.l}</span>
-                    <span style={{ fontSize:12,fontWeight:700,color:item.c,...numFont }}>₩{fmt(item.v)} ({monthTotal.total?((item.v/monthTotal.total)*100).toFixed(1):0}%)</span>
+                    <span style={{ fontSize:14,fontWeight:600,color:T.sub }}>{item.l}</span>
+                    <span style={{ fontSize:14,fontWeight:700,color:item.c }}>₩ {fmt(item.v)} ({monthTotal.total?((item.v/monthTotal.total)*100).toFixed(1):0}%)</span>
                   </div>
                   <div style={{ background:T.border,borderRadius:3,height:6 }}>
                     <div style={{ background:item.c,height:6,borderRadius:3,width:`${monthTotal.total?(item.v/monthTotal.total)*100:0}%`,transition:"width 0.6s" }}/>
@@ -985,17 +987,17 @@ function FinanceApp({ user }) {
               ))}
             </div>
             <div style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:14,padding:16 }}>
-              <div style={{ fontSize:13,fontWeight:800,color:T.text,marginBottom:12 }}>💳 카드 한도 소진 현황</div>
+              <div style={{ fontSize:15,fontWeight:800,color:T.text,marginBottom:12 }}>💳 카드 한도 소진 현황</div>
               {cards.map(c=>(
                 <div key={c.id} style={{ marginBottom:10 }}>
                   <div style={{ display:"flex",justifyContent:"space-between",marginBottom:4 }}>
-                    <span style={{ fontSize:12,color:T.sub }}>{c.company} <span style={{ color:T.muted }}>결제일 {c.payDay}일</span></span>
-                    <span style={{ fontSize:12,color:c.color,...numFont }}>₩{fmt(c.billing)} / ₩{fmt(c.limit)}</span>
+                    <span style={{ fontSize:14,fontWeight:600,color:T.sub }}>{c.company} <span style={{ fontSize:12,color:T.muted }}>결제일 {c.payDay}일</span></span>
+                    <span style={{ fontSize:14,fontWeight:700,color:c.color }}>₩ {fmt(c.billing)} / ₩ {fmt(c.limit)}</span>
                   </div>
                   <div style={{ background:T.border,borderRadius:3,height:6 }}>
                     <div style={{ background:c.color,height:6,borderRadius:3,width:`${Math.min(100,(c.billing/c.limit)*100)}%` }}/>
                   </div>
-                  <div style={{ fontSize:10,color:T.muted,marginTop:2,...numFont }}>가용 ₩{fmt(c.limit-c.billing)}</div>
+                  <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>가용 ₩ {fmt(c.limit-c.billing)}</div>
                 </div>
               ))}
             </div>
@@ -1068,14 +1070,14 @@ function FinanceApp({ user }) {
                 <div key={loan.id} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderLeft:`4px solid ${loan.color}`,borderRadius:12,padding:14,marginBottom:8 }}>
                   <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start" }}>
                     <div style={{ flex:1,minWidth:0 }}>
-                      <div style={{ fontWeight:800,fontSize:14,color:T.text }}>{loan.warning?"⚠️ ":""}{loan.name}</div>
-                      <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>
+                      <div style={{ fontWeight:800,fontSize:15,color:T.text }}>{loan.warning?"⚠️ ":""}{loan.name}</div>
+                      <div style={{ fontSize:12,color:T.muted,marginTop:2 }}>
                         {loan.bank} · {loan.rate}% · 만기 {loan.maturity}
                         <span style={{ marginLeft:8,background:dark?"#1E2D4A":T.bg3,padding:"1px 6px",borderRadius:4,fontSize:10 }}>{loan.type}</span>
                       </div>
                     </div>
                     <div style={{ display:"flex",alignItems:"center",gap:8,marginLeft:12 }}>
-                      <div style={{ fontWeight:900,fontSize:15,color:T.danger,...numFont }}>{fmtM(loan.balance)}원</div>
+                      <div style={{ fontWeight:900,fontSize:16,color:T.danger,...numFont }}>{fmtM(loan.balance)}원</div>
                       <button onClick={()=>setEditLoan(loan)} style={{ background:T.acc,color:"#fff",border:"none",borderRadius:6,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer" }}>수정</button>
                       <button onClick={()=>{if(window.confirm(`"${loan.name}" 대출을 삭제할까요?`))updateLoans(p=>p.filter(x=>x.id!==loan.id));}} style={{ background:T.danger,color:"#fff",border:"none",borderRadius:6,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer" }}>삭제</button>
                     </div>
@@ -1094,7 +1096,6 @@ function FinanceApp({ user }) {
                 </div>
               );
             })}
-            <button onClick={()=>setShowLoanModal(true)} style={{ width:"100%",padding:"12px",background:"none",border:`1.5px dashed ${T.border2}`,borderRadius:12,cursor:"pointer",fontSize:13,color:T.acc,fontWeight:700 }}>+ 대출 추가</button>
           </div>
         )}
 
@@ -1119,12 +1120,12 @@ function FinanceApp({ user }) {
               <div key={c.id} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderLeft:`4px solid ${c.color}`,borderRadius:12,padding:14,marginBottom:8 }}>
                 <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
                   <div>
-                    <div style={{ fontWeight:700,fontSize:14,color:T.text }}>{c.name}</div>
-                    <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>매월 {c.payDay}일 · {c.category}</div>
+                    <div style={{ fontWeight:800,fontSize:15,color:T.text }}>{c.name}</div>
+                    <div style={{ fontSize:12,color:T.muted,marginTop:2 }}>매월 {c.payDay}일 · {c.category}</div>
                   </div>
                   <div style={{ display:"flex",alignItems:"center",gap:10 }}>
-                    <div style={{ fontWeight:900,fontSize:16,color:c.color,...numFont }}>₩{fmt(c.amount)}</div>
-                    <button onClick={()=>{const v=prompt("금액 수정 (원):",c.amount);if(v)updateCosts(p=>p.map(x=>x.id===c.id?{...x,amount:Number(v)}:x));}} style={{ background:T.acc,color:"#fff",border:"none",borderRadius:6,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer" }}>수정</button>
+                    <div style={{ fontWeight:900,fontSize:16,color:c.color }}>₩ {fmt(c.amount)}</div>
+                    <button onClick={()=>setEditCost(c)} style={{ background:T.acc,color:"#fff",border:"none",borderRadius:6,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer" }}>수정</button>
                     <button onClick={()=>updateCosts(p=>p.filter(x=>x.id!==c.id))} style={{ background:T.danger,color:"#fff",border:"none",borderRadius:6,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer" }}>삭제</button>
                   </div>
                 </div>
@@ -1137,37 +1138,39 @@ function FinanceApp({ user }) {
         {tab==="계좌 관리" && (
           <div className="fu">
             {/* 요약 카드 */}
-            <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:14 }}>
-              {[
-                {l:"💰 총 잔액",    v:"₩ "+fmt(accounts.reduce((s,a)=>s+a.balance,0)), c:T.ok},
-                {l:"🏦 계좌 수",    v:accounts.length+"개",                              c:T.acc},
-                {l:"📊 이번달 지출", v:"₩ "+fmt(monthTotal.total),                       c:T.danger},
-              ].map((s,i)=>(
-                <div key={i} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:10,padding:"16px 18px",boxShadow:"0 1px 3px rgba(0,0,0,0.05)" }}>
-                  <div style={{ fontSize:11,color:T.muted,fontWeight:600,marginBottom:8 }}>{s.l}</div>
-                  <div style={{ fontSize:22,fontWeight:700,color:s.c }}>{s.v}</div>
-                </div>
-              ))}
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
+              <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,flex:1,marginRight:12 }}>
+                {[
+                  {l:"💰 총 잔액",    v:"₩ "+fmt(accounts.reduce((s,a)=>s+a.balance,0)), c:T.ok},
+                  {l:"🏦 계좌 수",    v:accounts.length+"개",                              c:T.acc},
+                  {l:"📊 이번달 지출", v:"₩ "+fmt(monthTotal.total),                       c:T.danger},
+                ].map((s,i)=>(
+                  <div key={i} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:10,padding:"16px 18px",boxShadow:"0 1px 3px rgba(0,0,0,0.05)" }}>
+                    <div style={{ fontSize:11,color:T.muted,fontWeight:600,marginBottom:8 }}>{s.l}</div>
+                    <div style={{ fontSize:22,fontWeight:700,color:s.c }}>{s.v}</div>
+                  </div>
+                ))}
+              </div>
+              <button onClick={()=>setShowAccountModal(true)} style={{ background:T.acc,color:"#fff",border:"none",borderRadius:8,padding:"10px 16px",fontSize:13,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" }}>+ 계좌 추가</button>
             </div>
             <div style={{ marginBottom:14 }}>
               {accounts.map(a=>(
-                <div key={a.id} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderLeft:`4px solid ${a.color}`,borderRadius:12,padding:16,marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                <div key={a.id} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderLeft:`4px solid ${a.color}`,borderRadius:12,padding:14,marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
                   <div>
-                    <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{a.name}</div>
-                    <div style={{ fontSize:12,color:T.muted,marginTop:4 }}>현재 잔액</div>
+                    <div style={{ fontWeight:800,fontSize:15,color:T.text }}>{a.name}</div>
+                    <div style={{ fontSize:12,color:T.muted,marginTop:2 }}>현재 잔액</div>
                   </div>
                   <div style={{ display:"flex",alignItems:"center",gap:12 }}>
-                    <div style={{ fontSize:22,fontWeight:400,color:a.balance>=0?T.ok:T.danger,...numFont }}>₩{fmt(a.balance)}</div>
+                    <div style={{ fontSize:16,fontWeight:900,color:a.balance>=0?T.ok:T.danger }}>₩ {fmt(a.balance)}</div>
                     <div style={{ display:"flex",gap:6 }}>
-                      <button onClick={()=>{const v=prompt(`${a.name} 잔액 수정 (원):`,a.balance);if(v!==null&&v!=="")updateAccounts(p=>p.map(x=>x.id===a.id?{...x,balance:Number(v)}:x));}} style={{ background:T.acc,color:"#fff",border:"none",borderRadius:6,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer" }}>잔액 수정</button>
-                      <button onClick={()=>setEditAccount(a)} style={{ background:T.bg3,color:T.text,border:`1px solid ${T.border}`,borderRadius:6,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer" }}>수정</button>
-                      <button onClick={()=>{if(window.confirm(`${a.name} 계좌를 삭제할까요?`))updateAccounts(p=>p.filter(x=>x.id!==a.id));}} style={{ background:T.danger,color:"#fff",border:"none",borderRadius:6,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer" }}>삭제</button>
+                      <button onClick={()=>{const v=prompt(`${a.name} 잔액 수정 (원):`,a.balance);if(v!==null&&v!=="")updateAccounts(p=>p.map(x=>x.id===a.id?{...x,balance:Number(v)}:x));}} style={{ background:T.acc,color:"#fff",border:"none",borderRadius:6,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer" }}>잔액 수정</button>
+                      <button onClick={()=>setEditAccount(a)} style={{ background:T.bg3,color:T.text,border:`1px solid ${T.border}`,borderRadius:6,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer" }}>수정</button>
+                      <button onClick={()=>{if(window.confirm(`${a.name} 계좌를 삭제할까요?`))updateAccounts(p=>p.filter(x=>x.id!==a.id));}} style={{ background:T.danger,color:"#fff",border:"none",borderRadius:6,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer" }}>삭제</button>
                     </div>
                   </div>
                 </div>
               ))}
             </div>
-            <button onClick={()=>setShowAccountModal(true)} style={{ width:"100%",padding:"13px",background:"none",border:`1.5px dashed ${T.border2}`,borderRadius:12,cursor:"pointer",fontSize:14,color:T.acc,fontWeight:700 }}>+ 계좌 추가</button>
             <div style={{ marginTop:16,background:dark?"#0A1020":"#EFF6FF",border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 16px",fontSize:12,color:T.sub,lineHeight:1.7 }}>
               <div>{"💡 "}잔액 계산 방법</div>
               <div style={{marginTop:4}}>전체 계좌 잔액 합계를 가계부의 시작 잔액으로 사용합니다.</div>

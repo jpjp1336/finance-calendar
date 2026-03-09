@@ -966,7 +966,7 @@ function CardUploadModal({ T, cards, uid, onUpdateCards, onClose }) {
         ...c,
         billing: calcBillingFromDB(deduped, c.id, c.payDay, c.company)
       }));
-      onUpdateCards(updatedCards);
+      onUpdateCards(updatedCards, deduped); // deduped: 앱 레벨 cardTxnDB 갱신용
       setExistingDB(deduped);
       setPhase("saved");
     } catch(e) {
@@ -1514,6 +1514,7 @@ function FinanceApp({ user }) {
   const [tab, setTab]         = useState("캘린더");
   const [cards, setCards]     = useState(DEFAULT_CARDS);
   const [loans, setLoans]     = useState(DEFAULT_LOANS);
+  const [cardTxnDB, setCardTxnDB] = useState([]); // 앱 레벨 누적 카드 거래 DB
   const [costs, setCosts]     = useState(DEFAULT_COSTS);
   const [accounts, setAccounts] = useState(DEFAULT_ACCOUNTS);
   const [memos, setMemos]     = useState({});
@@ -1548,22 +1549,17 @@ function FinanceApp({ user }) {
           const d = snap.data();
           let loadedCards = d.cards || (isOwner ? OWNER_CARDS : DEFAULT_CARDS);
           const loadedLoans = d.loans || (isOwner ? OWNER_LOANS : DEFAULT_LOANS);
-          // 오너: Firebase 카드 billing을 OWNER_CARDS 최신값으로 동기화
-          if (isOwner && d.cards) {
-            loadedCards = d.cards.map(c => {
-              const master = OWNER_CARDS.find(o => o.id === c.id);
-              return master ? { ...c, billing: master.billing } : c;
-            });
-          }
+          // billing은 txnDB에서 동적 계산하므로 하드코딩 동기화 불필요
           setCards(loadedCards);
           if (d.costs)    setCosts(d.costs);
           if (d.accounts) setAccounts(d.accounts);
           setLoans(loadedLoans);
           if (d.dark !== undefined) setDark(d.dark);
           // cards나 loans가 없었으면 or billing 동기화 후 바로 Firebase에 저장
-          if (!d.cards || !d.loans || (isOwner && d.cards)) {
+          if (!d.cards || !d.loans) {
+            const cardsToSave = loadedCards.map(({billing:_, ...rest}) => rest);
             await setDoc(doc(db, "users", user.uid, "data", "settings"), {
-              ...d, cards:loadedCards, loans:loadedLoans
+              ...d, cards:cardsToSave, loans:loadedLoans
             }, { merge:true });
           }
         } else if (isOwner) {
@@ -1572,6 +1568,11 @@ function FinanceApp({ user }) {
         }
         const memoSnap = await getDoc(doc(db, "users", user.uid, "data", "memos"));
         if (memoSnap.exists()) setMemos(memoSnap.data().entries || {});
+
+        // cardTxnDB 로드 + billing 자동 재계산
+        const txnSnap = await getDoc(doc(db, "users", user.uid, "data", "cardTxnDB"));
+        const txns = txnSnap.exists() ? (txnSnap.data().txns || []) : [];
+        setCardTxnDB(txns);
       } catch(e) { console.error(e); }
       setLoadingData(false);
     };
@@ -1582,7 +1583,9 @@ function FinanceApp({ user }) {
   const saveToFirebase = useCallback(async (newCards, newCosts, newDark, newAccounts, newLoans) => {
     setSaving(true);
     try {
-      await setDoc(doc(db, "users", user.uid, "data", "settings"), { cards:newCards, costs:newCosts, dark:newDark, accounts:newAccounts, loans:newLoans });
+      // billing은 txnDB에서 동적 계산 — Firebase에는 저장하지 않음
+      const cardsToSave = newCards.map(({billing:_, ...rest}) => rest);
+      await setDoc(doc(db, "users", user.uid, "data", "settings"), { cards:cardsToSave, costs:newCosts, dark:newDark, accounts:newAccounts, loans:newLoans });
     } catch(e) { console.error(e); }
     setSaving(false);
   }, [user.uid]);
@@ -1607,6 +1610,15 @@ function FinanceApp({ user }) {
   };
 
   const loansWS = useMemo(() => loans.map(getLoanWithSchedule), [loans]);
+
+  // ── billing 동적 재계산 (앱 로드 시 + txnDB 변경 시 자동 반영) ──
+  const computedCards = useMemo(() => {
+    if (!cardTxnDB.length) return cards; // txnDB 없으면 기존 cards 그대로 (수동 입력값 유지)
+    return cards.map(c => ({
+      ...c,
+      billing: calcBillingFromDB(cardTxnDB, c.id, c.payDay, c.company)
+    }));
+  }, [cards, cardTxnDB]);
   const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
 
   // ── 캘린더 이벤트 빌드 ──
@@ -1614,7 +1626,7 @@ function FinanceApp({ user }) {
     const map = {};
     const add = (day, ev) => { if(day>=1&&day<=daysInMonth){if(!map[day])map[day]=[];map[day].push(ev);} };
 
-    if (filter.card) cards.forEach(c => {
+    if (filter.card) computedCards.forEach(c => {
       const day = adjustToWeekday(calYear, calMonth, Math.min(c.payDay, daysInMonth), daysInMonth);
       add(day, { type:"card", color:c.color, icon:"💳", label:c.company, amount:c.billing, detail:`결제 ₩${fmt(c.billing)} · 한도 ₩${fmt(c.limit)}` });
     });
@@ -1642,7 +1654,7 @@ function FinanceApp({ user }) {
     });
 
     return map;
-  }, [cards, loansWS, costs, memos, calYear, calMonth, filter, daysInMonth]);
+  }, [computedCards, loansWS, costs, memos, calYear, calMonth, filter, daysInMonth]);
 
   // ── 월 합계 ──
   const monthTotal = useMemo(() => {
@@ -1703,7 +1715,7 @@ function FinanceApp({ user }) {
   const getDow   = d => new Date(calYear, calMonth, d).getDay();
 
   const totalDebt     = loans.reduce((s,l)=>s+l.balance,0);
-  const totalCardBill = cards.reduce((s,c)=>s+c.billing,0);
+  const totalCardBill = computedCards.reduce((s,c)=>s+c.billing,0);
 
   const TABS = ["캘린더","대시보드","카드 관리","대출 관리","고정비 관리","계좌 관리"];
 
@@ -1743,8 +1755,9 @@ function FinanceApp({ user }) {
           onClose={()=>{setShowAccountModal(false);setEditAccount(null);}}/>
       )}
       {showUploadModal && <CardUploadModal T={T} cards={cards} uid={user.uid}
-        onUpdateCards={updatedCards=>{
+        onUpdateCards={(updatedCards, deduped)=>{
           setCards(updatedCards);
+          if (deduped) setCardTxnDB(deduped); // 앱 레벨 txnDB 갱신 → computedCards 자동 재계산
           saveToFirebase(updatedCards, costs, dark, accounts, loans);
         }}
         onClose={()=>setShowUploadModal(false)}/>}
@@ -2057,7 +2070,7 @@ function FinanceApp({ user }) {
             </div>
             <div style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:14,padding:16 }}>
               <div style={{ fontSize:15,fontWeight:800,color:T.text,marginBottom:12 }}>💳 카드 한도 소진 현황</div>
-              {cards.map(c=>(
+              {computedCards.map(c=>(
                 <div key={c.id} style={{ marginBottom:10 }}>
                   <div style={{ display:"flex",justifyContent:"space-between",marginBottom:4 }}>
                     <span style={{ fontSize:14,fontWeight:600,color:T.sub }}>{c.company} <span style={{ fontSize:12,color:T.muted }}>결제일 {c.payDay}일</span></span>
@@ -2094,7 +2107,7 @@ function FinanceApp({ user }) {
                 <button onClick={()=>setShowCardModal(true)} style={{ background:T.acc,color:"#fff",border:"none",borderRadius:8,padding:"10px 16px",fontSize:13,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" }}>+ 카드 추가</button>
               </div>
             </div>
-            {cards.map(c=>(
+            {computedCards.map(c=>(
               <div key={c.id} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderLeft:`4px solid ${c.color}`,borderRadius:12,padding:14,marginBottom:8 }}>
                 <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
                   <div>

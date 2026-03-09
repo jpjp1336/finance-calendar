@@ -756,19 +756,60 @@ function makeTxnUID(cardId, t) {
 // 현재 날짜 기준으로 결제일이 아직 안 지난 것 = 이번 달 청구
 // 할부는 총금액/횟수 중 아직 미납분이 이번 달 결제일에 포함됨
 // → 단순화: 이번 달 결제일 기준으로 카드 DB에서 합산
-function calcBillingFromDB(txns, cardId, payDay) {
-  const now = new Date();
-  const yr = now.getFullYear(), mo = now.getMonth(); // 0-based
+// ── 카드사별 이용기간 오프셋 ──────────────────────────────────
+// startOff: 결제일에서 이 일수를 뺀 날이 전월 이용기간 시작일
+// endOff:   결제일에서 이 일수를 뺀 날이 당월 이용기간 종료일 (0이면 전월 말일)
+// 예) 현대카드 결제일12 → startOff11: 12-11=1(전월1일), endOff12: 12-12=0(전월말일)
+const CARD_BILLING_OFFSET = {
+  "현대카드":   { startOff: 11, endOff: 12 }, // 결제일12 → 전월1일~전월말일
+  "신한카드":   { startOff: 14, endOff: 15 }, // 결제일25 → 전월11일~당월10일
+  "삼성카드":   { startOff: 12, endOff: 13 }, // 결제일26 → 전월14일~당월13일
+  "하나카드":   { startOff: 12, endOff: 13 }, // 결제일13 → 전월1일~전월말일
+  "KB국민카드": { startOff: 14, endOff: 15 }, // 결제일20 → 전월6일~당월5일
+  "씨티카드":   { startOff: 14, endOff: 15 }, // 결제일20 → 전월6일~당월5일 (신한 동일 기준)
+  "롯데카드":   { startOff: 13, endOff: 14 }, // 결제일14 → 전월1일~전월말일
+  "우리카드":   { startOff: 13, endOff: 14 }, // 결제일14 → 전월1일~전월말일
+  "NH농협카드": { startOff: 13, endOff: 14 }, // 결제일14 → 전월1일~전월말일
+  "KJ광주카드": { startOff: 14, endOff: 15 }, // 결제일15 → 전월1일~전월말일
+};
 
-  // "이번 달 결제일"이 오늘 이후면 이번달, 이전이면 다음달 기준
-  const billDate = new Date(yr, mo, payDay);
-  // 전 달 결제일 ~ 이번 달 결제일 사이 승인된 거래가 이번 달 청구 대상
-  const prevBillDate = new Date(yr, mo - 1, payDay);
+// 이용기간 시작/종료 날짜 계산
+// 반환: { start: Date, end: Date } — 이 기간(start 이상, end 이하)의 거래가 이번달 청구 대상
+function getBillingPeriod(payDay, cardCompany) {
+  const now = new Date();
+  const yr  = now.getFullYear(), mo = now.getMonth(); // 0-based
+
+  const off = CARD_BILLING_OFFSET[cardCompany] || { startOff: 13, endOff: 14 }; // 기본값 14일 기준
+
+  // 종료일: 결제일 - endOff (당월 기준, <=0 이면 전월 말일)
+  const endDay = payDay - off.endOff;
+  let periodEnd;
+  if (endDay <= 0) {
+    // 전월 말일
+    periodEnd = new Date(yr, mo, 0); // new Date(yr, mo, 0) = 전월 마지막 날
+  } else {
+    periodEnd = new Date(yr, mo, endDay);
+  }
+
+  // 시작일: 결제일 - startOff (전월 기준)
+  const startDay = payDay - off.startOff;
+  let periodStart;
+  if (startDay <= 0) {
+    // 전전월 말일 기준 계산 (극히 드문 케이스)
+    periodStart = new Date(yr, mo - 1, 0 + startDay + 1);
+  } else {
+    periodStart = new Date(yr, mo - 1, startDay);
+  }
+
+  return { start: periodStart, end: periodEnd };
+}
+
+function calcBillingFromDB(txns, cardId, payDay, cardCompany) {
+  const { start: periodStart, end: periodEnd } = getBillingPeriod(payDay, cardCompany || "");
 
   let total = 0;
   for (const t of txns) {
     if (t.cardId !== cardId) continue;
-    // 날짜 파싱
     const rawDate = (t.date || "").replace(/[^0-9]/g, "");
     if (rawDate.length < 8) continue;
     const txDate = new Date(
@@ -781,20 +822,15 @@ function calcBillingFromDB(txns, cardId, payDay) {
     const installments = parseInt(t.installment) || 1;
 
     if (installments <= 1) {
-      // 일시불: 전 결제일 < 승인일 <= 이번 결제일
-      if (txDate > prevBillDate && txDate <= billDate) {
-        total += t.amount;
-      }
+      // 일시불: 이용기간 이내 거래
+      if (txDate >= periodStart && txDate <= periodEnd) total += t.amount;
     } else {
-      // 할부: 승인일부터 installments 개월에 걸쳐 매달 amount/installments 청구
+      // 할부: 승인월 다음달부터 installments 개월에 걸쳐 amount/installments 청구
       const monthlyAmt = Math.round(t.amount / installments);
       for (let i = 0; i < installments; i++) {
-        // i번째 회차 결제일
-        const chargeMo = txDate.getMonth() + 1 + i; // 승인월+1 부터 청구 시작
-        const chargeDate = new Date(txDate.getFullYear(), chargeMo, payDay);
-        if (chargeDate > prevBillDate && chargeDate <= billDate) {
-          total += monthlyAmt;
-        }
+        // i번째 할부 회차의 결제일 (승인월+1+i월의 payDay)
+        const chargeDate = new Date(txDate.getFullYear(), txDate.getMonth() + 1 + i, payDay);
+        if (chargeDate >= periodStart && chargeDate <= periodEnd) total += monthlyAmt;
       }
     }
   }
@@ -928,7 +964,7 @@ function CardUploadModal({ T, cards, uid, onUpdateCards, onClose }) {
       // 카드별 billing 재계산
       const updatedCards = cards.map(c => ({
         ...c,
-        billing: calcBillingFromDB(deduped, c.id, c.payDay)
+        billing: calcBillingFromDB(deduped, c.id, c.payDay, c.company)
       }));
       onUpdateCards(updatedCards);
       setExistingDB(deduped);
@@ -942,7 +978,7 @@ function CardUploadModal({ T, cards, uid, onUpdateCards, onClose }) {
   // 전체 DB 통계 (카드별)
   const dbStats = cards.map(c => {
     const cTxns = existingDB.filter(t => t.cardId === c.id);
-    return { ...c, count: cTxns.length, billing: calcBillingFromDB(existingDB, c.id, c.payDay) };
+    return { ...c, count: cTxns.length, billing: calcBillingFromDB(existingDB, c.id, c.payDay, c.company) };
   }).filter(c => c.count > 0);
 
   const totalNewTxns = pendingFiles.filter(f=>!f.error).reduce((s,f)=>(s + (f.newTxns?.length||0)),0);

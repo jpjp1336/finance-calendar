@@ -137,6 +137,11 @@ const DEFAULT_LOANS = [
     warning:"만기연장 예정 - 즉시 은행 협의 필요 (031-445-1111)" },
 ];
 
+const DEFAULT_ACCOUNTS = [
+  { id:1, name:"사업자통장", balance:0, color:"#3B82F6" },
+  { id:2, name:"개인통장",   balance:0, color:"#10B981" },
+];
+
 // ─── 테마 ────────────────────────────────────────────────────
 const DARK = {
   bg:"#070B18", bg2:"#0F1629", bg3:"#141D35",
@@ -156,6 +161,38 @@ const LIGHT = {
   card:"#FFFFFF", inp:"#F0F4FA",
   ledgerBg:"#E8EFF8", ledgerRow:"#FFFFFF", ledgerAlt:"#F5F8FD",
 };
+
+// ─── 계좌 모달 ───────────────────────────────────────────────
+function AccountModal({ account, T, onSave, onClose }) {
+  const COLORS = ["#3B82F6","#10B981","#F59E0B","#8B5CF6","#EC4899","#EF4444","#F97316","#14B8A6"];
+  const [form, setForm] = useState({ name:"", balance:0, color:COLORS[0], ...account });
+  const inp = { width:"100%", background:T.inp, border:`1px solid ${T.border}`, borderRadius:8, padding:"10px 12px", color:T.text, fontSize:13, boxSizing:"border-box", fontFamily:"inherit" };
+  return (
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000 }} onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:16,padding:24,width:"min(400px,95vw)" }}>
+        <div style={{ fontSize:16,fontWeight:900,color:T.text,marginBottom:16 }}>{account?"✏️ 계좌 수정":"🏦 계좌 추가"}</div>
+        <div style={{ marginBottom:12 }}>
+          <div style={{ fontSize:11,color:T.muted,fontWeight:700,marginBottom:5 }}>계좌명</div>
+          <input style={inp} placeholder="예: 사업자통장, 하나은행" value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}/>
+        </div>
+        <div style={{ marginBottom:14 }}>
+          <div style={{ fontSize:11,color:T.muted,fontWeight:700,marginBottom:5 }}>현재 잔액 (원)</div>
+          <input style={inp} type="number" placeholder="0" value={form.balance} onChange={e=>setForm(f=>({...f,balance:Number(e.target.value)}))}/>
+        </div>
+        <div style={{ marginBottom:20 }}>
+          <div style={{ fontSize:11,color:T.muted,fontWeight:700,marginBottom:8 }}>색상</div>
+          <div style={{ display:"flex",gap:8 }}>
+            {COLORS.map(c=><div key={c} onClick={()=>setForm(f=>({...f,color:c}))} style={{ width:26,height:26,borderRadius:6,background:c,cursor:"pointer",border:form.color===c?"3px solid "+T.text:"3px solid transparent" }}/>)}
+          </div>
+        </div>
+        <div style={{ display:"flex",gap:10,justifyContent:"flex-end" }}>
+          <button onClick={onClose} style={{ background:"none",border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 18px",fontSize:13,fontWeight:700,cursor:"pointer",color:T.sub }}>취소</button>
+          <button onClick={()=>{if(!form.name)return alert("계좌명을 입력해주세요!");onSave({...form,id:account?.id||Date.now()});}} style={{ background:T.acc,color:"#fff",border:"none",borderRadius:8,padding:"10px 18px",fontSize:13,fontWeight:700,cursor:"pointer" }}>저장</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── 로그인 화면 ──────────────────────────────────────────────
 function LoginScreen({ dark }) {
@@ -190,8 +227,8 @@ function LoginScreen({ dark }) {
 }
 
 // ─── 메모 추가 모달 ───────────────────────────────────────────
-function MemoModal({ date, T, onSave, onClose }) {
-  const [form, setForm] = useState({ label:"", amount:"", type:"지출", color:"#EF4444" });
+function MemoModal({ date, T, accounts, onSave, onClose }) {
+  const [form, setForm] = useState({ label:"", amount:"", type:"지출", color:"#EF4444", accountId: accounts[0]?.id||null });
   const COLORS = ["#EF4444","#3B82F6","#10B981","#F59E0B","#8B5CF6","#EC4899","#F97316","#14B8A6"];
   const inp = { width:"100%", background:T.inp, border:`1px solid ${T.border}`, borderRadius:8, padding:"10px 12px", color:T.text, fontSize:13, boxSizing:"border-box", fontFamily:"inherit" };
   return (
@@ -216,6 +253,15 @@ function MemoModal({ date, T, onSave, onClose }) {
             </select>
           </div>
         </div>
+        {accounts.length>0 && (
+          <div style={{ marginBottom:12 }}>
+            <div style={{ fontSize:11,color:T.muted,fontWeight:700,marginBottom:5 }}>계좌</div>
+            <select style={inp} value={form.accountId||""} onChange={e=>setForm(f=>({...f,accountId:Number(e.target.value)||null}))}>
+              <option value="">계좌 선택 안 함</option>
+              {accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          </div>
+        )}
         <div style={{ marginBottom:20 }}>
           <div style={{ fontSize:11,color:T.muted,fontWeight:700,marginBottom:8 }}>색상</div>
           <div style={{ display:"flex",gap:8 }}>
@@ -226,7 +272,7 @@ function MemoModal({ date, T, onSave, onClose }) {
           <button onClick={onClose} style={{ background:"none",border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 18px",fontSize:13,fontWeight:700,cursor:"pointer",color:T.sub }}>취소</button>
           <button onClick={()=>{
             if (!form.label||!form.amount) return alert("항목명과 금액을 입력해주세요!");
-            onSave({ id:Date.now(), date, label:form.label, amount:Number(form.amount), type:form.type, color:form.color, icon:form.type==="수입"?"💚":"🔴" });
+            onSave({ id:Date.now(), date, label:form.label, amount:Number(form.amount), type:form.type, color:form.color, icon:form.type==="수입"?"💚":"🔴", accountId:form.accountId });
           }} style={{ background:T.acc,color:"#fff",border:"none",borderRadius:8,padding:"10px 18px",fontSize:13,fontWeight:700,cursor:"pointer" }}>저장</button>
         </div>
       </div>
@@ -316,7 +362,8 @@ function FinanceApp({ user }) {
   const [cards, setCards]     = useState(DEFAULT_CARDS);
   const [loans]               = useState(DEFAULT_LOANS);
   const [costs, setCosts]     = useState(DEFAULT_COSTS);
-  const [memos, setMemos]     = useState({}); // { "2026-03-15": [{id,label,amount,type,color,icon}] }
+  const [accounts, setAccounts] = useState(DEFAULT_ACCOUNTS);
+  const [memos, setMemos]     = useState({});
   const [saving, setSaving]   = useState(false);
   const [loadingData, setLoadingData] = useState(true);
 
@@ -329,7 +376,9 @@ function FinanceApp({ user }) {
   const [showMemoModal, setShowMemoModal] = useState(false);
   const [showCardModal, setShowCardModal] = useState(false);
   const [showCostModal, setShowCostModal] = useState(false);
+  const [showAccountModal, setShowAccountModal] = useState(false);
   const [editCard, setEditCard]     = useState(null);
+  const [editAccount, setEditAccount] = useState(null);
 
   // ── Firebase 데이터 로드 ──
   useEffect(() => {
@@ -338,8 +387,9 @@ function FinanceApp({ user }) {
         const snap = await getDoc(doc(db, "users", user.uid, "data", "settings"));
         if (snap.exists()) {
           const d = snap.data();
-          if (d.cards)  setCards(d.cards);
-          if (d.costs)  setCosts(d.costs);
+          if (d.cards)    setCards(d.cards);
+          if (d.costs)    setCosts(d.costs);
+          if (d.accounts) setAccounts(d.accounts);
           if (d.dark !== undefined) setDark(d.dark);
         }
         const memoSnap = await getDoc(doc(db, "users", user.uid, "data", "memos"));
@@ -351,10 +401,10 @@ function FinanceApp({ user }) {
   }, [user.uid]);
 
   // ── Firebase 저장 ──
-  const saveToFirebase = useCallback(async (newCards, newCosts, newDark) => {
+  const saveToFirebase = useCallback(async (newCards, newCosts, newDark, newAccounts) => {
     setSaving(true);
     try {
-      await setDoc(doc(db, "users", user.uid, "data", "settings"), { cards:newCards, costs:newCosts, dark:newDark });
+      await setDoc(doc(db, "users", user.uid, "data", "settings"), { cards:newCards, costs:newCosts, dark:newDark, accounts:newAccounts });
     } catch(e) { console.error(e); }
     setSaving(false);
   }, [user.uid]);
@@ -365,12 +415,15 @@ function FinanceApp({ user }) {
   }, [user.uid]);
 
   const updateCards = (fn) => {
-    setCards(prev => { const n = typeof fn==="function"?fn(prev):fn; saveToFirebase(n,costs,dark); return n; });
+    setCards(prev => { const n = typeof fn==="function"?fn(prev):fn; saveToFirebase(n,costs,dark,accounts); return n; });
   };
   const updateCosts = (fn) => {
-    setCosts(prev => { const n = typeof fn==="function"?fn(prev):fn; saveToFirebase(cards,n,dark); return n; });
+    setCosts(prev => { const n = typeof fn==="function"?fn(prev):fn; saveToFirebase(cards,n,dark,accounts); return n; });
   };
-  const toggleDark = () => { const nd=!dark; setDark(nd); saveToFirebase(cards,costs,nd); };
+  const updateAccounts = (fn) => {
+    setAccounts(prev => { const n = typeof fn==="function"?fn(prev):fn; saveToFirebase(cards,costs,dark,n); return n; });
+  };
+  const toggleDark = () => { const nd=!dark; setDark(nd); saveToFirebase(cards,costs,nd,accounts); };
 
   const loansWS = useMemo(() => loans.map(getLoanWithSchedule), [loans]);
   const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
@@ -439,6 +492,7 @@ function FinanceApp({ user }) {
     for (let d=1; d<=daysInMonth; d++) {
       const evs = calEvents[d]||[];
       evs.forEach(ev => {
+        const acct = ev.accountId ? accounts.find(a=>a.id===ev.accountId) : null;
         rows.push({
           day: d,
           label: ev.fullLabel||ev.label,
@@ -447,14 +501,16 @@ function FinanceApp({ user }) {
           color: ev.color,
           icon: ev.icon,
           type: ev.type,
+          accountName: acct?.name||"",
         });
       });
     }
     rows.sort((a,b)=>a.day-b.day);
-    // 잔액 계산 (메모 수입 있을 때만 의미있음)
-    let bal = 0;
+    // 잔액 = 전체 계좌 합산 잔액에서 시작
+    const startBal = accounts.reduce((s,a)=>s+a.balance,0);
+    let bal = startBal;
     return rows.map(r => { bal += r.income - r.expense; return { ...r, balance:bal }; });
-  }, [calEvents, daysInMonth]);
+  }, [calEvents, daysInMonth, accounts]);
 
   // ── 캘린더 그리드 ──
   const { firstDay } = useMemo(() => ({
@@ -468,7 +524,7 @@ function FinanceApp({ user }) {
   const totalDebt     = loans.reduce((s,l)=>s+l.balance,0);
   const totalCardBill = cards.reduce((s,c)=>s+c.billing,0);
 
-  const TABS = ["캘린더","대시보드","카드 관리","대출 관리","고정비 관리"];
+  const TABS = ["캘린더","대시보드","카드 관리","대출 관리","고정비 관리","계좌 관리"];
 
   const css = `
     @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;800;900&family=DM+Mono:wght@400;500&display=swap');
@@ -493,12 +549,17 @@ function FinanceApp({ user }) {
       <style>{css}</style>
 
       {showMemoModal && selectedDay && (
-        <MemoModal date={`${calYear}-${String(calMonth+1).padStart(2,"0")}-${String(selectedDay).padStart(2,"0")}`} T={T}
+        <MemoModal date={`${calYear}-${String(calMonth+1).padStart(2,"0")}-${String(selectedDay).padStart(2,"0")}`} T={T} accounts={accounts}
           onSave={memo => {
             const key = memo.date;
             const nm = { ...memos, [key]: [...(memos[key]||[]), memo] };
             setMemos(nm); saveMemos(nm); setShowMemoModal(false);
           }} onClose={()=>setShowMemoModal(false)}/>
+      )}
+      {(showAccountModal||editAccount) && (
+        <AccountModal account={editAccount} T={T}
+          onSave={a=>{ if(editAccount) updateAccounts(p=>p.map(x=>x.id===a.id?a:x)); else updateAccounts(p=>[...p,a]); setShowAccountModal(false);setEditAccount(null); }}
+          onClose={()=>{setShowAccountModal(false);setEditAccount(null);}}/>
       )}
       {(showCardModal||editCard) && (
         <CardModal card={editCard} T={T}
@@ -537,7 +598,7 @@ function FinanceApp({ user }) {
       {/* ─── 탭 ─── */}
       <div style={{ display:"flex",gap:3,padding:"8px 16px",background:dark?"#090D1F":T.bg3,borderBottom:`1px solid ${T.border}`,overflowX:"auto" }}>
         {TABS.map(t=>(
-          <button key={t} onClick={()=>{setTab(t);setSelectedDay(null);}} style={{ padding:"7px 14px",borderRadius:8,fontSize:13,fontWeight:700,cursor:"pointer",border:"none",background:tab===t?T.acc:"transparent",color:tab===t?"#fff":T.sub,whiteSpace:"nowrap",transition:"all 0.15s" }}>{t}</button>
+          <button key={t} onClick={()=>{setTab(t);setSelectedDay(null);}} style={{ padding:"7px 14px",borderRadius:8,fontSize:20,fontWeight:700,cursor:"pointer",border:"none",background:tab===t?T.acc:"transparent",color:tab===t?"#fff":T.sub,whiteSpace:"nowrap",transition:"all 0.15s" }}>{t}</button>
         ))}
       </div>
 
@@ -550,18 +611,18 @@ function FinanceApp({ user }) {
             <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8 }}>
               <div style={{ display:"flex",alignItems:"center",gap:8 }}>
                 {["‹","›"].map((a,i)=>(
-                  <button key={a} onClick={()=>{const nd=new Date(calYear,calMonth+(i?1:-1));setCalYear(nd.getFullYear());setCalMonth(nd.getMonth());setSelectedDay(null);}} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:8,color:T.sub,padding:"7px 15px",cursor:"pointer",fontSize:16 }}>{a}</button>
+                  <button key={a} onClick={()=>{const nd=new Date(calYear,calMonth+(i?1:-1));setCalYear(nd.getFullYear());setCalMonth(nd.getMonth());setSelectedDay(null);}} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:8,color:T.sub,padding:"7px 15px",cursor:"pointer",fontSize:20 }}>{a}</button>
                 ))}
-                <span style={{ fontSize:16,fontWeight:900,color:T.text,...numFont }}>{calYear}년 {calMonth+1}월</span>
-                <button onClick={()=>{setCalYear(TODAY.getFullYear());setCalMonth(TODAY.getMonth());}} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:6,color:T.muted,padding:"5px 10px",cursor:"pointer",fontSize:12 }}>오늘</button>
+                <span style={{ fontSize:20,fontWeight:900,color:T.text,...numFont }}>{calYear}년 {calMonth+1}월</span>
+                <button onClick={()=>{setCalYear(TODAY.getFullYear());setCalMonth(TODAY.getMonth());}} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:6,color:T.muted,padding:"5px 10px",cursor:"pointer",fontSize:20 }}>오늘</button>
               </div>
               <div style={{ display:"flex",gap:5,flexWrap:"wrap",alignItems:"center" }}>
                 {[{k:"card",l:"💳 카드",c:T.acc},{k:"loan",l:"🏦 대출",c:"#A78BFA"},{k:"cost",l:"🏢 고정비",c:T.warn},{k:"memo",l:"✏️ 메모",c:T.ok}].map(f=>(
-                  <button key={f.k} onClick={()=>setFilter(p=>({...p,[f.k]:!p[f.k]}))} style={{ padding:"5px 11px",borderRadius:20,fontSize:11,fontWeight:700,cursor:"pointer",border:`1px solid ${filter[f.k]?f.c+"66":T.border}`,background:filter[f.k]?f.c+"22":"transparent",color:filter[f.k]?f.c:T.muted,transition:"all 0.15s" }}>{f.l}</button>
+                  <button key={f.k} onClick={()=>setFilter(p=>({...p,[f.k]:!p[f.k]}))} style={{ padding:"5px 11px",borderRadius:20,fontSize:20,fontWeight:700,cursor:"pointer",border:`1px solid ${filter[f.k]?f.c+"66":T.border}`,background:filter[f.k]?f.c+"22":"transparent",color:filter[f.k]?f.c:T.muted,transition:"all 0.15s" }}>{f.l}</button>
                 ))}
                 <div style={{ display:"flex",background:T.bg2,borderRadius:8,border:`1px solid ${T.border}`,overflow:"hidden" }}>
                   {[["월",1],["일",0]].map(([l,v])=>(
-                    <button key={v} onClick={()=>setWeekStart(v)} style={{ padding:"5px 11px",fontSize:11,cursor:"pointer",border:"none",background:weekStart===v?T.acc:"transparent",color:weekStart===v?"#fff":T.sub,fontWeight:700 }}>{l}요일</button>
+                    <button key={v} onClick={()=>setWeekStart(v)} style={{ padding:"5px 11px",fontSize:20,cursor:"pointer",border:"none",background:weekStart===v?T.acc:"transparent",color:weekStart===v?"#fff":T.sub,fontWeight:700 }}>{l}요일</button>
                   ))}
                 </div>
               </div>
@@ -576,8 +637,8 @@ function FinanceApp({ user }) {
                 {l:"📊 총 지출",v:monthTotal.total,     c:T.danger},
               ].map(s=>(
                 <div key={s.l} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px 12px" }}>
-                  <div style={{ fontSize:20,color:T.muted,marginBottom:4 }}>{s.l}</div>
-                  <div style={{ fontSize:28,fontWeight:400,color:s.c,...numFont }}>₩{fmt(s.v)}</div>
+                  <div style={{ fontSize:15,color:T.muted,marginBottom:4 }}>{s.l}</div>
+                  <div style={{ fontSize:20,fontWeight:400,color:s.c,...numFont }}>₩{fmt(s.v)}</div>
                 </div>
               ))}
             </div>
@@ -587,7 +648,7 @@ function FinanceApp({ user }) {
               {WEEKDAYS.map((d,i)=>{
                 const isSun=(weekStart===1&&i===6)||(weekStart===0&&i===0);
                 const isSat=(weekStart===1&&i===5)||(weekStart===0&&i===6);
-                return <div key={d} style={{ textAlign:"center",padding:"7px 0",fontSize:24,fontWeight:700,color:isSun?T.danger:isSat?T.warn:T.muted }}>{d}</div>;
+                return <div key={d} style={{ textAlign:"center",padding:"7px 0",fontSize:20,fontWeight:700,color:isSun?T.danger:isSat?T.warn:T.muted }}>{d}</div>;
               })}
             </div>
 
@@ -609,16 +670,16 @@ function FinanceApp({ user }) {
                     border:`1.5px solid ${isTod?T.acc:isSel?T.border2:isSun?(dark?"#3B0A0A":"#FDD"):isSat?(dark?"#3B2200":"#FFE"):(T.border)}`,
                     transition:"all 0.12s",position:"relative"
                   }}>
-                    <div style={{ fontSize:22,fontWeight:isTod?800:400,marginBottom:3,color:isTod?T.acc:isSun?T.danger:isSat?T.warn:T.muted }}>
-                      {isTod ? <span style={{ background:T.acc,color:"#fff",borderRadius:4,padding:"1px 5px",fontSize:20 }}>오늘</span> : d}
-                      {hasMemo && <span style={{ marginLeft:3,fontSize:18,color:T.ok }}>✎</span>}
+                    <div style={{ fontSize:18,fontWeight:isTod?800:400,marginBottom:3,color:isTod?T.acc:isSun?T.danger:isSat?T.warn:T.muted }}>
+                      {isTod ? <span style={{ background:T.acc,color:"#fff",borderRadius:4,padding:"1px 5px",fontSize:18 }}>오늘</span> : d}
+                      {hasMemo && <span style={{ marginLeft:3,fontSize:16,color:T.ok }}>✎</span>}
                     </div>
                     {evs.slice(0,3).map((ev,ei)=>(
-                      <div key={ei} style={{ fontSize:18,padding:"2px 4px",borderRadius:3,marginBottom:2,background:ev.color+"28",border:`1px solid ${ev.color}55`,color:ev.color,lineHeight:1.4,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis" }}>
+                      <div key={ei} style={{ fontSize:16,padding:"2px 4px",borderRadius:3,marginBottom:2,background:ev.color+"28",border:`1px solid ${ev.color}55`,color:ev.color,lineHeight:1.4,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis" }}>
                         {ev.icon} {ev.label}
                       </div>
                     ))}
-                    {evs.length>3 && <div style={{ fontSize:18,color:T.muted,paddingLeft:2 }}>+{evs.length-3}건</div>}
+                    {evs.length>3 && <div style={{ fontSize:16,color:T.muted,paddingLeft:2 }}>+{evs.length-3}건</div>}
                   </div>
                 );
               })}
@@ -690,14 +751,14 @@ function FinanceApp({ user }) {
                   <table style={{ width:"100%",borderCollapse:"collapse",fontSize:12 }}>
                     <thead>
                       <tr style={{ background:dark?"#090D1F":T.bg3 }}>
-                        {["월","일","항목","입금","출금","잔액"].map(h=>(
+                        {["월","일","항목","계좌","입금","출금","잔액"].map(h=>(
                           <th key={h} style={{ padding:"9px 12px",textAlign:["입금","출금","잔액"].includes(h)?"right":"left",color:T.muted,fontSize:10,fontWeight:700,borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap" }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {ledgerRows.length===0 && (
-                        <tr><td colSpan={6} style={{ padding:"24px",textAlign:"center",color:T.muted,fontSize:13 }}>이번 달 일정이 없습니다</td></tr>
+                        <tr><td colSpan={7} style={{ padding:"24px",textAlign:"center",color:T.muted,fontSize:13 }}>이번 달 일정이 없습니다</td></tr>
                       )}
                       {ledgerRows.map((r,i)=>(
                         <tr key={i} style={{ background:i%2===0?T.ledgerRow:T.ledgerAlt,borderBottom:`1px solid ${T.border}` }}>
@@ -712,6 +773,7 @@ function FinanceApp({ user }) {
                               </span>
                             </span>
                           </td>
+                          <td style={{ padding:"8px 12px",color:T.sub,fontSize:11 }}>{r.accountName||"—"}</td>
                           <td style={{ padding:"8px 12px",textAlign:"right",color:T.ok,fontWeight:400,...numFont }}>
                             {r.income>0 ? fmt(r.income) : ""}
                           </td>
@@ -726,7 +788,7 @@ function FinanceApp({ user }) {
                     </tbody>
                     <tfoot>
                       <tr style={{ background:dark?"#090D1F":T.bg3,borderTop:`2px solid ${T.border}` }}>
-                        <td colSpan={3} style={{ padding:"10px 12px",fontWeight:800,color:T.text,fontSize:13 }}>합계</td>
+                        <td colSpan={4} style={{ padding:"10px 12px",fontWeight:800,color:T.text,fontSize:13 }}>합계</td>
                         <td style={{ padding:"10px 12px",textAlign:"right",color:T.ok,fontWeight:400,...numFont }}>
                           {fmt(ledgerRows.reduce((s,r)=>s+r.income,0))}
                         </td>
@@ -914,6 +976,62 @@ function FinanceApp({ user }) {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── 루트 컴포넌트 ────────────────────────────────────────────
+        {tab==="계좌 관리" && (
+          <div className="fu">
+            {/* 요약 카드 */}
+            <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:14 }}>
+              {[
+                {l:"💰 총 잔액",   v:accounts.reduce((s,a)=>s+a.balance,0), c:T.ok},
+                {l:"🏦 계좌 수",   v:accounts.length+"개",                   c:T.acc, isStr:true},
+                {l:"📊 이번달 지출",v:monthTotal.total,                       c:T.danger},
+              ].map((s,i)=>(
+                <div key={i} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:12,padding:"14px 16px" }}>
+                  <div style={{ fontSize:11,color:T.muted,marginBottom:6 }}>{s.l}</div>
+                  <div style={{ fontSize:18,fontWeight:400,color:s.c,...numFont }}>{s.isStr?s.v:"₩"+fmt(s.v)}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* 계좌 목록 */}
+            <div style={{ marginBottom:14 }}>
+              {accounts.map(a=>(
+                <div key={a.id} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderLeft:`4px solid ${a.color}`,borderRadius:12,padding:16,marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                  <div>
+                    <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{a.name}</div>
+                    <div style={{ fontSize:12,color:T.muted,marginTop:4 }}>현재 잔액</div>
+                  </div>
+                  <div style={{ display:"flex",alignItems:"center",gap:12 }}>
+                    <div style={{ fontSize:22,fontWeight:400,color:a.balance>=0?T.ok:T.danger,...numFont }}>₩{fmt(a.balance)}</div>
+                    <div style={{ display:"flex",gap:6 }}>
+                      <button onClick={()=>{
+                        const v = prompt(`${a.name} 잔액 수정 (원):`, a.balance);
+                        if(v!==null && v!=="") updateAccounts(p=>p.map(x=>x.id===a.id?{...x,balance:Number(v)}:x));
+                      }} style={{ background:T.acc,color:"#fff",border:"none",borderRadius:6,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer" }}>잔액 수정</button>
+                      <button onClick={()=>setEditAccount(a)} style={{ background:T.bg3,color:T.text,border:`1px solid ${T.border}`,borderRadius:6,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer" }}>수정</button>
+                      <button onClick={()=>{if(window.confirm(`${a.name} 계좌를 삭제할까요?`))updateAccounts(p=>p.filter(x=>x.id!==a.id));}} style={{ background:T.danger,color:"#fff",border:"none",borderRadius:6,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer" }}>삭제</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button onClick={()=>setShowAccountModal(true)} style={{ width:"100%",padding:"13px",background:"none",border:`1.5px dashed ${T.border2}`,borderRadius:12,cursor:"pointer",fontSize:14,color:T.acc,fontWeight:700 }}>+ 계좌 추가</button>
+
+            {/* 안내 */}
+            <div style={{ marginTop:16,background:dark?"#0A1020":"#EFF6FF",border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 16px",fontSize:12,color:T.sub,lineHeight:1.7 }}>
+              💡 <b>잔액 계산 방법</b><br/>
+              전체 계좌 잔액 합계를 가계부의 시작 잔액으로 사용합니다.<br/>
+              수입/지출 메모를 기록하면 잔액이 자동으로 계산됩니다.<br/>
+              실제 은행 잔액과 맞지 않을 때는 <b>잔액 수정</b> 버튼으로 직접 조정하세요.
+            </div>
           </div>
         )}
       </div>

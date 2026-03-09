@@ -108,16 +108,9 @@ function getLoanWithSchedule(loan) {
 
 // ─── 기본 데이터 ──────────────────────────────────────────────
 const DEFAULT_CARDS = [
-  { id:1,                company:"현대카드",   limit:2200000,  payDay:12, billing:342788,  color:"#059669" },
-  { id:1772864633576,    company:"신한카드",   limit:7500000,  payDay:25, billing:3979800, color:"#2563eb" },
-  { id:1772864882224,    company:"삼성카드",   limit:16000000, payDay:26, billing:9560440, color:"#2563eb" },
-  { id:1772864965988,    company:"하나카드",   limit:5000000,  payDay:13, billing:706790,  color:"#059669" },
-  { id:1772865082800,    company:"KB국민카드", limit:20000000, payDay:20, billing:5325390, color:"#d97706" },
-  { id:1772865111030,    company:"씨티카드",   limit:30000000, payDay:20, billing:0,       color:"#2563eb" },
-  { id:1772865154382,    company:"롯데카드",   limit:50000000, payDay:14, billing:8360890, color:"#dc2626" },
-  { id:1772865199536,    company:"우리카드",   limit:20000000, payDay:14, billing:0,       color:"#2563eb" },
-  { id:1772865317906,    company:"NH농협카드", limit:13000000, payDay:14, billing:110890,  color:"#0891b2" },
-  { id:1772865460949,    company:"KJ광주카드", limit:14000000, payDay:15, billing:452680,  color:"#db2777" },
+  { id:1, company:"신한카드",   limit:5000000,  payDay:15, billing:0, color:"#2563eb" },
+  { id:2, company:"현대카드",   limit:3000000,  payDay:12, billing:0, color:"#059669" },
+  { id:3, company:"KB국민카드", limit:10000000, payDay:20, billing:0, color:"#d97706" },
 ];
 const DEFAULT_COSTS = [
   { id:1, name:"사무실 임대료",  payDay:5,  amount:1500000, color:"#10B981", category:"임차료" },
@@ -129,23 +122,8 @@ const DEFAULT_COSTS = [
   { id:7, name:"택배비",         payDay:25, amount:300000,  color:"#F97316", category:"운반비" },
 ];
 const DEFAULT_LOANS = [
-  { id:1, name:"하나은행 운전자금 이차보전", bank:"하나은행", balance:10000000, rate:3.609, maturity:"2026-12-07", payDay:7, color:"#3B82F6", type:"수동",
-    schedule:[
-      {date:"2026-03-07",principal:2500000,interest:27685,total:2527685,balance:7500000},
-      {date:"2026-06-07",principal:2500000,interest:22556,total:2522556,balance:5000000},
-      {date:"2026-09-07",principal:2500000,interest:15038,total:2515038,balance:2500000},
-      {date:"2026-12-07",principal:2500000,interest:7519, total:2507519,balance:0},
-    ]},
-  { id:2, name:"하나은행 일반운전자금",     bank:"하나은행",   balance:9166684,   rate:5.719, maturity:"2027-12-07", payDay:7,  color:"#6366F1", type:"원금균등",       totalMonths:22, startDate:"2026-03-01" },
-  { id:3, name:"하나 e소상공인 대환",       bank:"하나은행",   balance:20000000,  rate:4.842, maturity:"2033-03-28", payDay:28, color:"#8B5CF6", type:"거치후원금균등", graceMonths:1, repayMonths:84, startDate:"2026-03-01" },
-  { id:4, name:"흥국생명 계약자대출",       bank:"흥국생명",   balance:34689730,  rate:10.44, maturity:"2030-04-20", payDay:20, color:"#EC4899", type:"원리금균등",     totalMonths:50, startDate:"2026-03-01" },
-  { id:5, name:"농협",                      bank:"농협",       balance:10000000,  rate:3.37,  maturity:"2032-09-24", payDay:24, color:"#10B981", type:"원금균등",       totalMonths:78, startDate:"2026-10-01" },
-  { id:6, name:"소상공인진흥공단",          bank:"소진공",     balance:58705338,  rate:2.11,  maturity:"2035-07-05", payDay:5,  color:"#F59E0B", type:"원금균등",       totalMonths:112,startDate:"2026-04-01" },
-  { id:7, name:"KB카드론 (양해선)",          bank:"KB국민카드", balance:36118479,  rate:10.31, maturity:"2029-02-15", payDay:15, color:"#EF4444", type:"원리금균등",     totalMonths:36, startDate:"2026-03-01" },
-  { id:8, name:"KB 지식산업센터 대출",      bank:"KB국민은행", balance:186000000, rate:5.7,   maturity:"2026-04-02", payDay:4,  color:"#F97316", type:"만기일시상환",   startDate:"2026-03-01",
-    warning:"만기연장 예정 - 즉시 은행 협의 필요 (031-445-1111)" },
-  { id:9, name:"차량할부 (레이)",           bank:"캐피탈",     balance:2230971,   rate:2.9,   maturity:"2026-11-20", payDay:20, color:"#06B6D4", type:"원금균등",       totalMonths:9,  startDate:"2026-03-01" },
-  { id:10, name:"차량할부 (셀토스)",        bank:"캐피탈",     balance:5439550,   rate:2.9,   maturity:"2027-02-25", payDay:25, color:"#84CC16", type:"원금균등",       totalMonths:12, startDate:"2026-03-01" },
+  { id:1, name:"은행 신용대출", bank:"은행명", balance:10000000, rate:4.5, maturity:"2027-12-31", payDay:15, color:"#3B82F6", type:"원금균등", totalMonths:24, startDate:"2026-01-01" },
+  { id:2, name:"주택담보대출",  bank:"은행명", balance:50000000, rate:3.5, maturity:"2035-12-31", payDay:25, color:"#8B5CF6", type:"원리금균등", totalMonths:120, startDate:"2026-01-01" },
 ];
 
 const DEFAULT_ACCOUNTS = [
@@ -328,6 +306,79 @@ function CardModal({ card, T, onSave, onClose }) {
   );
 }
 
+// ─── 대출 모달 ──────────────────────────────────────────────
+function LoanModal({ loan, T, onSave, onClose }) {
+  const COLORS = ["#3B82F6","#6366F1","#8B5CF6","#EC4899","#EF4444","#F97316","#F59E0B","#10B981","#06B6D4","#84CC16"];
+  const TYPES = ["원금균등","원리금균등","이자만","만기일시상환","거치후원금균등"];
+  const today = new Date().toISOString().slice(0,7) + "-01";
+  const [form, setForm] = useState({
+    name:"", bank:"", balance:"", rate:"", maturity:"", payDay:"",
+    type:"원금균등", totalMonths:"", graceMonths:"", repayMonths:"",
+    startDate:today, warning:"", color:COLORS[0],
+    ...loan,
+    balance: loan?.balance||"",
+    rate: loan?.rate||"",
+    payDay: loan?.payDay||"",
+    totalMonths: loan?.totalMonths||"",
+    graceMonths: loan?.graceMonths||"",
+    repayMonths: loan?.repayMonths||"",
+  });
+  const inp = { width:"100%", background:T.inp, border:`1px solid ${T.border}`, borderRadius:8, padding:"9px 12px", color:T.text, fontSize:13, boxSizing:"border-box", fontFamily:"inherit" };
+  const lbl = { fontSize:11, color:T.muted, fontWeight:700, marginBottom:4, display:"block" };
+  const needsMonths = ["원금균등","원리금균등"].includes(form.type);
+  const isGrace = form.type === "거치후원금균등";
+  return (
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,overflowY:"auto",padding:"20px 0" }}
+      onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:16,padding:24,width:"min(480px,95vw)" }}>
+        <div style={{ fontSize:16,fontWeight:900,color:T.text,marginBottom:16 }}>{loan?"✏️ 대출 수정":"🏦 대출 추가"}</div>
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10 }}>
+          <div style={{ gridColumn:"1/-1" }}><label style={lbl}>대출명 *</label><input style={inp} placeholder="예: 하나은행 운전자금" value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}/></div>
+          <div><label style={lbl}>은행명</label><input style={inp} placeholder="예: 하나은행" value={form.bank} onChange={e=>setForm(f=>({...f,bank:e.target.value}))}/></div>
+          <div><label style={lbl}>현재 잔액 (원) *</label><input style={inp} type="number" placeholder="10000000" value={form.balance} onChange={e=>setForm(f=>({...f,balance:e.target.value}))}/></div>
+          <div><label style={lbl}>연이율 (%)</label><input style={inp} type="number" step="0.001" placeholder="4.5" value={form.rate} onChange={e=>setForm(f=>({...f,rate:e.target.value}))}/></div>
+          <div><label style={lbl}>납부일 (매월)</label><input style={inp} type="number" min="1" max="31" placeholder="15" value={form.payDay} onChange={e=>setForm(f=>({...f,payDay:e.target.value}))}/></div>
+          <div><label style={lbl}>만기일</label><input style={inp} type="date" value={form.maturity} onChange={e=>setForm(f=>({...f,maturity:e.target.value}))}/></div>
+          <div><label style={lbl}>상환 시작일</label><input style={inp} type="date" value={form.startDate} onChange={e=>setForm(f=>({...f,startDate:e.target.value}))}/></div>
+          <div style={{ gridColumn:"1/-1" }}><label style={lbl}>상환 방식</label>
+            <select style={inp} value={form.type} onChange={e=>setForm(f=>({...f,type:e.target.value}))}>
+              {TYPES.map(t=><option key={t}>{t}</option>)}
+            </select>
+          </div>
+          {needsMonths && <div><label style={lbl}>총 납부 개월</label><input style={inp} type="number" placeholder="60" value={form.totalMonths} onChange={e=>setForm(f=>({...f,totalMonths:e.target.value}))}/></div>}
+          {isGrace && <>
+            <div><label style={lbl}>거치 개월</label><input style={inp} type="number" placeholder="12" value={form.graceMonths} onChange={e=>setForm(f=>({...f,graceMonths:e.target.value}))}/></div>
+            <div><label style={lbl}>상환 개월</label><input style={inp} type="number" placeholder="48" value={form.repayMonths} onChange={e=>setForm(f=>({...f,repayMonths:e.target.value}))}/></div>
+          </>}
+          <div style={{ gridColumn:"1/-1" }}><label style={lbl}>⚠️ 경고 메시지 (선택)</label><input style={inp} placeholder="예: 만기연장 필요" value={form.warning||""} onChange={e=>setForm(f=>({...f,warning:e.target.value}))}/></div>
+        </div>
+        <div style={{ marginBottom:20 }}>
+          <label style={lbl}>색상</label>
+          <div style={{ display:"flex",gap:7,flexWrap:"wrap" }}>
+            {COLORS.map(c=><div key={c} onClick={()=>setForm(f=>({...f,color:c}))} style={{ width:26,height:26,borderRadius:6,background:c,cursor:"pointer",border:form.color===c?"3px solid "+T.text:"3px solid transparent" }}/>)}
+          </div>
+        </div>
+        <div style={{ display:"flex",gap:10,justifyContent:"flex-end" }}>
+          <button onClick={onClose} style={{ background:"none",border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 18px",fontSize:13,fontWeight:700,cursor:"pointer",color:T.sub }}>취소</button>
+          <button onClick={()=>{
+            if(!form.name||!form.balance) return alert("대출명과 잔액을 입력해주세요!");
+            onSave({
+              ...form,
+              id: loan?.id||Date.now(),
+              balance: Number(form.balance),
+              rate: Number(form.rate)||0,
+              payDay: Number(form.payDay)||15,
+              totalMonths: Number(form.totalMonths)||0,
+              graceMonths: Number(form.graceMonths)||0,
+              repayMonths: Number(form.repayMonths)||0,
+            });
+          }} style={{ background:T.acc,color:"#fff",border:"none",borderRadius:8,padding:"10px 18px",fontSize:13,fontWeight:700,cursor:"pointer" }}>저장</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── 고정비 모달 ──────────────────────────────────────────────
 function CostModal({ T, onSave, onClose }) {
   const COLORS = ["#10B981","#3B82F6","#F59E0B","#8B5CF6","#EC4899","#EF4444","#F97316","#14B8A6"];
@@ -371,7 +422,7 @@ function FinanceApp({ user }) {
 
   const [tab, setTab]         = useState("캘린더");
   const [cards, setCards]     = useState(DEFAULT_CARDS);
-  const [loans]               = useState(DEFAULT_LOANS);
+  const [loans, setLoans]     = useState(DEFAULT_LOANS);
   const [costs, setCosts]     = useState(DEFAULT_COSTS);
   const [accounts, setAccounts] = useState(DEFAULT_ACCOUNTS);
   const [memos, setMemos]     = useState({});
@@ -390,6 +441,8 @@ function FinanceApp({ user }) {
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [editCard, setEditCard]     = useState(null);
   const [editAccount, setEditAccount] = useState(null);
+  const [showLoanModal, setShowLoanModal] = useState(false);
+  const [editLoan, setEditLoan]       = useState(null);
 
   // ── Firebase 데이터 로드 ──
   useEffect(() => {
@@ -401,6 +454,7 @@ function FinanceApp({ user }) {
           if (d.cards)    setCards(d.cards);
           if (d.costs)    setCosts(d.costs);
           if (d.accounts) setAccounts(d.accounts);
+          if (d.loans)    setLoans(d.loans);
           if (d.dark !== undefined) setDark(d.dark);
         }
         const memoSnap = await getDoc(doc(db, "users", user.uid, "data", "memos"));
@@ -412,10 +466,10 @@ function FinanceApp({ user }) {
   }, [user.uid]);
 
   // ── Firebase 저장 ──
-  const saveToFirebase = useCallback(async (newCards, newCosts, newDark, newAccounts) => {
+  const saveToFirebase = useCallback(async (newCards, newCosts, newDark, newAccounts, newLoans) => {
     setSaving(true);
     try {
-      await setDoc(doc(db, "users", user.uid, "data", "settings"), { cards:newCards, costs:newCosts, dark:newDark, accounts:newAccounts });
+      await setDoc(doc(db, "users", user.uid, "data", "settings"), { cards:newCards, costs:newCosts, dark:newDark, accounts:newAccounts, loans:newLoans });
     } catch(e) { console.error(e); }
     setSaving(false);
   }, [user.uid]);
@@ -426,15 +480,18 @@ function FinanceApp({ user }) {
   }, [user.uid]);
 
   const updateCards = (fn) => {
-    setCards(prev => { const n = typeof fn==="function"?fn(prev):fn; saveToFirebase(n,costs,dark,accounts); return n; });
+    setCards(prev => { const n = typeof fn==="function"?fn(prev):fn; saveToFirebase(n,costs,dark,accounts,loans); return n; });
   };
   const updateCosts = (fn) => {
-    setCosts(prev => { const n = typeof fn==="function"?fn(prev):fn; saveToFirebase(cards,n,dark,accounts); return n; });
+    setCosts(prev => { const n = typeof fn==="function"?fn(prev):fn; saveToFirebase(cards,n,dark,accounts,loans); return n; });
   };
   const updateAccounts = (fn) => {
-    setAccounts(prev => { const n = typeof fn==="function"?fn(prev):fn; saveToFirebase(cards,costs,dark,n); return n; });
+    setAccounts(prev => { const n = typeof fn==="function"?fn(prev):fn; saveToFirebase(cards,costs,dark,n,loans); return n; });
   };
-  const toggleDark = () => { const nd=!dark; setDark(nd); saveToFirebase(cards,costs,nd,accounts); };
+  const toggleDark = () => { const nd=!dark; setDark(nd); saveToFirebase(cards,costs,nd,accounts,loans); };
+  const updateLoans = (fn) => {
+    setLoans(prev => { const n = typeof fn==="function"?fn(prev):fn; saveToFirebase(cards,costs,dark,accounts,n); return n; });
+  };
 
   const loansWS = useMemo(() => loans.map(getLoanWithSchedule), [loans]);
   const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
@@ -578,6 +635,15 @@ function FinanceApp({ user }) {
           onClose={()=>{setShowCardModal(false);setEditCard(null);}}/>
       )}
       {showCostModal && <CostModal T={T} onSave={c=>{updateCosts(p=>[...p,c]);setShowCostModal(false);}} onClose={()=>setShowCostModal(false)}/>}
+      {(showLoanModal||editLoan) && (
+        <LoanModal loan={editLoan} T={T}
+          onSave={l=>{
+            if(editLoan) updateLoans(p=>p.map(x=>x.id===l.id?l:x));
+            else updateLoans(p=>[...p,l]);
+            setShowLoanModal(false); setEditLoan(null);
+          }}
+          onClose={()=>{setShowLoanModal(false);setEditLoan(null);}}/>
+      )}
 
       {/* ─── 헤더 ─── */}
       <div style={{ background:T.hdr,borderBottom:`1px solid ${T.border}`,padding:"13px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,zIndex:50,backdropFilter:"blur(12px)" }}>
@@ -924,16 +990,19 @@ function FinanceApp({ user }) {
         {/* ══════════════════ 대출 관리 탭 ══════════════════ */}
         {tab==="대출 관리" && (
           <div className="fu">
-            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14 }}>
-              {[
-                {l:"총 대출 잔액",    v:fmtM(totalDebt)+"원",      c:T.danger},
-                {l:"이번달 납부 예정",v:"₩"+fmt(monthTotal.loan),  c:"#A78BFA"},
-              ].map((s,i)=>(
-                <div key={i} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:12,padding:"14px 16px" }}>
-                  <div style={{ fontSize:10,color:T.muted,marginBottom:6 }}>{s.l}</div>
-                  <div style={{ fontSize:20,fontWeight:900,color:s.c,...numFont }}>{s.v}</div>
-                </div>
-              ))}
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,flex:1,marginRight:12 }}>
+                {[
+                  {l:"총 대출 잔액",    v:fmtM(totalDebt)+"원",      c:T.danger},
+                  {l:"이번달 납부 예정",v:"₩"+fmt(monthTotal.loan),  c:"#A78BFA"},
+                ].map((s,i)=>(
+                  <div key={i} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:12,padding:"14px 16px" }}>
+                    <div style={{ fontSize:10,color:T.muted,marginBottom:6 }}>{s.l}</div>
+                    <div style={{ fontSize:20,fontWeight:900,color:s.c,...numFont }}>{s.v}</div>
+                  </div>
+                ))}
+              </div>
+              <button onClick={()=>setShowLoanModal(true)} style={{ background:T.acc,color:"#fff",border:"none",borderRadius:8,padding:"10px 16px",fontSize:13,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" }}>+ 대출 추가</button>
             </div>
             {loans.filter(l=>l.warning).map(l=>(
               <div key={l.id} style={{ background:dark?"#1C0A0A":"#FFF5F5",border:`1px solid ${T.danger}44`,borderRadius:12,padding:"13px 16px",display:"flex",gap:10,marginBottom:10 }}>
@@ -946,14 +1015,18 @@ function FinanceApp({ user }) {
               return (
                 <div key={loan.id} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderLeft:`4px solid ${loan.color}`,borderRadius:12,padding:14,marginBottom:8 }}>
                   <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start" }}>
-                    <div>
-                      <div style={{ fontWeight:800,fontSize:14,color:T.text }}>{loan.name}</div>
+                    <div style={{ flex:1,minWidth:0 }}>
+                      <div style={{ fontWeight:800,fontSize:14,color:T.text }}>{loan.warning?"⚠️ ":""}{loan.name}</div>
                       <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>
                         {loan.bank} · {loan.rate}% · 만기 {loan.maturity}
                         <span style={{ marginLeft:8,background:dark?"#1E2D4A":T.bg3,padding:"1px 6px",borderRadius:4,fontSize:10 }}>{loan.type}</span>
                       </div>
                     </div>
-                    <div style={{ fontWeight:900,fontSize:16,color:T.danger,...numFont }}>{fmtM(loan.balance)}원</div>
+                    <div style={{ display:"flex",alignItems:"center",gap:8,marginLeft:12 }}>
+                      <div style={{ fontWeight:900,fontSize:15,color:T.danger,...numFont }}>{fmtM(loan.balance)}원</div>
+                      <button onClick={()=>setEditLoan(loan)} style={{ background:T.acc,color:"#fff",border:"none",borderRadius:6,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer" }}>수정</button>
+                      <button onClick={()=>{if(window.confirm(`"${loan.name}" 대출을 삭제할까요?`))updateLoans(p=>p.filter(x=>x.id!==loan.id));}} style={{ background:T.danger,color:"#fff",border:"none",borderRadius:6,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer" }}>삭제</button>
+                    </div>
                   </div>
                   {upcoming.length>0 && (
                     <div style={{ marginTop:10,borderTop:`1px solid ${T.border}`,paddingTop:10 }}>
@@ -969,6 +1042,7 @@ function FinanceApp({ user }) {
                 </div>
               );
             })}
+            <button onClick={()=>setShowLoanModal(true)} style={{ width:"100%",padding:"12px",background:"none",border:`1.5px dashed ${T.border2}`,borderRadius:12,cursor:"pointer",fontSize:13,color:T.acc,fontWeight:700 }}>+ 대출 추가</button>
           </div>
         )}
 

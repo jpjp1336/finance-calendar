@@ -106,6 +106,42 @@ function getLoanWithSchedule(loan) {
   return { ...loan, schedule: calcSchedule(loan) };
 }
 
+// ─── 오너 전용 데이터 ────────────────────────────────────────
+const OWNER_UID = "EXRAhy2hx0WWmh1dcU7xMV1W8rL2";
+
+const OWNER_CARDS = [
+  { id:1,                company:"현대카드",   limit:2200000,  payDay:12, billing:342788,  color:"#059669" },
+  { id:1772864633576,    company:"신한카드",   limit:7500000,  payDay:25, billing:3979800, color:"#2563eb" },
+  { id:1772864882224,    company:"삼성카드",   limit:16000000, payDay:26, billing:9560440, color:"#2563eb" },
+  { id:1772864965988,    company:"하나카드",   limit:5000000,  payDay:13, billing:706790,  color:"#059669" },
+  { id:1772865082800,    company:"KB국민카드", limit:20000000, payDay:20, billing:5325390, color:"#d97706" },
+  { id:1772865111030,    company:"씨티카드",   limit:30000000, payDay:20, billing:0,       color:"#2563eb" },
+  { id:1772865154382,    company:"롯데카드",   limit:50000000, payDay:14, billing:8360890, color:"#dc2626" },
+  { id:1772865199536,    company:"우리카드",   limit:20000000, payDay:14, billing:0,       color:"#2563eb" },
+  { id:1772865317906,    company:"NH농협카드", limit:13000000, payDay:14, billing:110890,  color:"#0891b2" },
+  { id:1772865460949,    company:"KJ광주카드", limit:14000000, payDay:15, billing:452680,  color:"#db2777" },
+];
+
+const OWNER_LOANS = [
+  { id:1, name:"하나은행 운전자금 이차보전", bank:"하나은행", balance:10000000, rate:3.609, maturity:"2026-12-07", payDay:7, color:"#3B82F6", type:"수동",
+    schedule:[
+      {date:"2026-03-07",principal:2500000,interest:27685,total:2527685,balance:7500000},
+      {date:"2026-06-07",principal:2500000,interest:22556,total:2522556,balance:5000000},
+      {date:"2026-09-07",principal:2500000,interest:15038,total:2515038,balance:2500000},
+      {date:"2026-12-07",principal:2500000,interest:7519, total:2507519,balance:0},
+    ]},
+  { id:2,  name:"하나은행 일반운전자금",    bank:"하나은행",   balance:9166684,   rate:5.719, maturity:"2027-12-07", payDay:7,  color:"#6366F1", type:"원금균등",       totalMonths:22,  startDate:"2026-03-01" },
+  { id:3,  name:"하나 e소상공인 대환",      bank:"하나은행",   balance:20000000,  rate:4.842, maturity:"2033-03-28", payDay:28, color:"#8B5CF6", type:"거치후원금균등", graceMonths:1, repayMonths:84, startDate:"2026-03-01" },
+  { id:4,  name:"흥국생명 계약자대출",      bank:"흥국생명",   balance:34689730,  rate:10.44, maturity:"2030-04-20", payDay:20, color:"#EC4899", type:"원리금균등",     totalMonths:50,  startDate:"2026-03-01" },
+  { id:5,  name:"농협",                     bank:"농협",       balance:10000000,  rate:3.37,  maturity:"2032-09-24", payDay:24, color:"#10B981", type:"원금균등",       totalMonths:78,  startDate:"2026-10-01" },
+  { id:6,  name:"소상공인진흥공단",         bank:"소진공",     balance:58705338,  rate:2.11,  maturity:"2035-07-05", payDay:5,  color:"#F59E0B", type:"원금균등",       totalMonths:112, startDate:"2026-04-01" },
+  { id:7,  name:"KB카드론 (양해선)",         bank:"KB국민카드", balance:36118479,  rate:10.31, maturity:"2029-02-15", payDay:15, color:"#EF4444", type:"원리금균등",     totalMonths:36,  startDate:"2026-03-01" },
+  { id:8,  name:"KB 지식산업센터 대출",     bank:"KB국민은행", balance:186000000, rate:5.7,   maturity:"2026-04-02", payDay:4,  color:"#F97316", type:"만기일시상환",   startDate:"2026-03-01",
+    warning:"만기연장 예정 - 즉시 은행 협의 필요 (031-445-1111)" },
+  { id:9,  name:"차량할부 (레이)",          bank:"캐피탈",     balance:2230971,   rate:2.9,   maturity:"2026-11-20", payDay:20, color:"#06B6D4", type:"원금균등",       totalMonths:9,   startDate:"2026-03-01" },
+  { id:10, name:"차량할부 (셀토스)",        bank:"캐피탈",     balance:5439550,   rate:2.9,   maturity:"2027-02-25", payDay:25, color:"#84CC16", type:"원금균등",       totalMonths:12,  startDate:"2026-03-01" },
+];
+
 // ─── 기본 데이터 ──────────────────────────────────────────────
 const DEFAULT_CARDS = [
   { id:1, company:"신한카드",   limit:5000000,  payDay:15, billing:0, color:"#2563eb" },
@@ -449,13 +485,25 @@ function FinanceApp({ user }) {
     const load = async () => {
       try {
         const snap = await getDoc(doc(db, "users", user.uid, "data", "settings"));
+        const isOwner = user.uid === OWNER_UID;
         if (snap.exists()) {
           const d = snap.data();
-          if (d.cards)    setCards(d.cards);
+          const loadedCards = d.cards || (isOwner ? OWNER_CARDS : DEFAULT_CARDS);
+          const loadedLoans = d.loans || (isOwner ? OWNER_LOANS : DEFAULT_LOANS);
+          setCards(loadedCards);
           if (d.costs)    setCosts(d.costs);
           if (d.accounts) setAccounts(d.accounts);
-          if (d.loans)    setLoans(d.loans);
+          setLoans(loadedLoans);
           if (d.dark !== undefined) setDark(d.dark);
+          // cards나 loans가 없었으면 바로 Firebase에 저장
+          if (!d.cards || !d.loans) {
+            await setDoc(doc(db, "users", user.uid, "data", "settings"), {
+              ...d, cards:loadedCards, loans:loadedLoans
+            }, { merge:true });
+          }
+        } else if (isOwner) {
+          setCards(OWNER_CARDS);
+          setLoans(OWNER_LOANS);
         }
         const memoSnap = await getDoc(doc(db, "users", user.uid, "data", "memos"));
         if (memoSnap.exists()) setMemos(memoSnap.data().entries || {});

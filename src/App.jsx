@@ -452,108 +452,256 @@ function CostModal({ T, cost, onSave, onClose }) {
 
 
 // ─── 카드사별 파서 ────────────────────────────────────────────
-function detectAndParse(text, fname) {
+// ── SheetJS 동적 로드 ──
+function ensureXLSX() {
+  return new Promise((res, rej) => {
+    if (window.XLSX) { res(); return; }
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+    s.onload = res; s.onerror = () => rej(new Error("SheetJS 로드 실패"));
+    document.head.appendChild(s);
+  });
+}
+
+// ── 카드사 감지 (파일명 우선) ──
+// fk: 파일명 키워드 (소문자), tk: 파일 내용 키워드
+const CARD_DETECT = [
+  { company:"우리카드",    fk:["woori","우리카드"],          tk:["국내 거래승인내역","우리카드"] },
+  { company:"현대카드",    fk:["hyundai","현대카드","현대"],  tk:["종합소득세 이용내역","hyundaicard","현대카드"] },
+  { company:"신한카드",    fk:["shinhan","신한카드","신한"],  tk:["개인사업자용 이용내역","신한카드"] },
+  { company:"삼성카드",    fk:["samsung","삼성카드","삼성"],  tk:["개인사업자용 카드 이용내역","삼성카드"] },
+  { company:"하나카드",    fk:["hana","하나카드","하나"],     tk:["종합소득세이용내역조회","하나카드"] },
+  { company:"KB국민카드",  fk:["kb국민","kbcard","국민카드","국민"], tk:["부가세등 신고용","KB국민카드","국민카드"] },
+  { company:"롯데카드",    fk:["lotte","롯데카드","롯데"],    tk:["세금 신고용 카드이용내역","롯데카드"] },
+  { company:"NH농협카드",  fk:["nh농협","농협카드","농협"],   tk:["NH채움","NH농협카드","농협"] },
+  { company:"씨티카드",    fk:["citi","씨티카드","씨티"],     tk:["세금신고용 사용내역 현황","씨티카드","citi"] },
+  { company:"KJ광주카드",  fk:["kj광주","gwangju","광주은행카드","광주카드"], tk:["광주카드","KJ카드","광주은행"] },
+  { company:"BC카드",      fk:["bc카드"],                    tk:["BC카드"] },
+];
+
+function detectCompanyFromFname(fname) {
   const flo = fname.toLowerCase();
-
-  // ── 카드사 감지 ──
-  const CARD_PATTERNS = [
-    { name:"우리카드",    fileKeys:["woori","우리카드"],    textKeys:["국내 거래승인내역","우리카드"] },
-    { name:"현대카드",    fileKeys:["hyundai","현대카드"],  textKeys:["현대카드","이용대금명세서"] },
-    { name:"신한카드",    fileKeys:["shinhan","신한"],      textKeys:["신한카드","신한"] },
-    { name:"삼성카드",    fileKeys:["samsung","삼성"],      textKeys:["삼성카드"] },
-    { name:"하나카드",    fileKeys:["hana","하나"],         textKeys:["하나카드","하나은행"] },
-    { name:"KB국민카드",  fileKeys:["kb","kbcard","국민"],  textKeys:["KB국민카드","국민카드"] },
-    { name:"롯데카드",    fileKeys:["lotte","롯데"],        textKeys:["롯데카드"] },
-    { name:"NH농협카드",  fileKeys:["nh","농협"],           textKeys:["NH농협카드","농협카드"] },
-    { name:"씨티카드",    fileKeys:["citi","씨티"],         textKeys:["씨티카드","한국씨티"] },
-    { name:"KJ광주카드",  fileKeys:["kj","gwangju","광주"], textKeys:["광주카드","KJ카드"] },
-  ];
-
-  let detectedCompany = null;
-  for (const p of CARD_PATTERNS) {
-    if (p.fileKeys.some(k => flo.includes(k))) { detectedCompany = p.name; break; }
+  for (const p of CARD_DETECT) {
+    if (p.fk.some(k => flo.includes(k))) return p.company;
   }
-  if (!detectedCompany) {
-    for (const p of CARD_PATTERNS) {
-      if (p.textKeys.some(k => text.includes(k))) { detectedCompany = p.name; break; }
+  return null;
+}
+function detectCompanyFromText(text) {
+  for (const p of CARD_DETECT) {
+    if (p.tk.some(k => text.includes(k))) return p.company;
+  }
+  return null;
+}
+
+// ── 날짜/금액/할부 정규화 ──
+function txnNormDate(s) {
+  if (!s && s !== 0) return "";
+  s = String(s).replace(/\xa0/g,"").trim();
+  const n = parseFloat(s);
+  if (!isNaN(n) && n > 40000 && n < 55000) {
+    const d = new Date(Math.round((n - 25569) * 86400 * 1000));
+    return d.toISOString().slice(0,10);
+  }
+  const clean = s.replace(/[./]/g,"-");
+  const m = clean.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return `${m[1]}-${m[2].padStart(2,"0")}-${m[3].padStart(2,"0")}`;
+  const m2 = clean.match(/(\d{4})(\d{2})(\d{2})/);
+  if (m2) return `${m2[1]}-${m2[2]}-${m2[3]}`;
+  return s;
+}
+function txnNormAmt(s) {
+  if (!s) return 0;
+  return parseInt(String(s).replace(/[^0-9-]/g,"")) || 0;
+}
+function txnNormInstall(s) {
+  if (!s) return 0;
+  return parseInt(String(s).replace(/[^0-9]/g,"")) || 0;
+}
+
+// ── XLS/XLSX rows 파싱 (세금신고용 10개사 범용) ──
+// 지원: 현대/신한/삼성/하나/KB국민/씨티/롯데/NH농협/KJ광주/BC카드
+function detectAndParseRows(rows, fname) {
+  const detectedCompany = detectCompanyFromFname(fname)
+    || detectCompanyFromText(rows.slice(0,10).map(r=>(r||[]).join("")).join("\n"));
+
+  const txns = [];
+  let hdr = -1, h = {};
+
+  // 헤더 행 자동 감지 (최대 30행: 씨티카드 15행, 농협 13행 등)
+  for (let i = 0; i < Math.min(rows.length, 30); i++) {
+    const r = rows[i] || [];
+    const joined = r.map(c => String(c||"").replace(/[\n\r\t]/g,"")).join("");
+    const hasDate  = /매출일자|사용일자|이용일(?!자)|거래일|이용일자/.test(joined);
+    const hasAmt   = /금액/.test(joined);
+    const hasMerch = /가맹점|이용하신/.test(joined);
+    if ((hasDate || hasMerch) && hasAmt) {
+      hdr = i;
+      r.forEach((cell, ci) => {
+        const t = String(cell||"").replace(/[\n\r\t ]/g,"");
+        // 날짜: 매출일자/사용일자/이용일/이용일자/거래일
+        if (!h.date     && /^(매출일자|사용일자|이용일자?|거래일)$/.test(t)) h.date = ci;
+        // 승인번호
+        if (!h.approval && /승인번호|승인No/.test(t)) h.approval = ci;
+        // 금액: 원화사용금액 우선, 매출금액(원) 포함, 이용/사용금액
+        if (!h.amount   && /^원화사용금액$/.test(t)) h.amount = ci;
+        if (!h.amount   && /^매출금액(\(원\))?$/.test(t)) h.amount = ci;
+        if (!h.amount   && /^(이용금액|사용금액)$/.test(t)) h.amount = ci;
+        // 할부: 할부개월수/할부기간/할부 개월 등
+        if (!h.install  && /할부.{0,3}(개월|기간|월)|개월.{0,3}할부/.test(t)) h.install = ci;
+        // 가맹점
+        if (!h.merchant && /가맹점명|이용하신곳/.test(t)) h.merchant = ci;
+        // 사업자번호
+        if (!h.bizNo    && /사업자(번호|등록번호)|가맹사업자번호/.test(t)) h.bizNo = ci;
+        // 부가세
+        if (!h.vat      && /부가세|총세금/.test(t)) h.vat = ci;
+        // 분류/내용
+        if (!h.category && /^분류$/.test(t)) h.category = ci;
+        if (!h.memo     && /^내용$/.test(t)) h.memo = ci;
+        // 취소여부
+        if (!h.cancel   && /취소여부/.test(t)) h.cancel = ci;
+        // PG 하위몰
+        if (!h.pgSubMall && /PG.*하위|하위몰/.test(t)) h.pgSubMall = ci;
+      });
+      break;
     }
   }
 
-  const lines = text.split(/[\r\n]+/);
+  if (hdr < 0 || h.amount === undefined) return { detectedCompany, txns };
 
-  // ── 컬럼 헤더 자동 감지 ──
+  // 승인번호 없는 카드사 중복거래 구분용 시퀀스 맵
+  const seqMap = new Map();
+
+  for (let i = hdr+1; i < rows.length; i++) {
+    const r = rows[i] || [];
+    if (!r.some(c => String(c||"").trim())) continue;
+
+    // 날짜
+    const dateStr = txnNormDate(r[h.date]);
+    if (!dateStr || !dateStr.match(/^20\d{2}/)) continue;
+
+    // 금액 (음수=취소, 0=제외)
+    const amount = txnNormAmt(r[h.amount]);
+    if (amount <= 0) continue;
+
+    // 취소여부 컬럼 있으면 '정상'만 통과
+    if (h.cancel !== undefined) {
+      const cv = String(r[h.cancel]||"").trim();
+      if (cv && cv !== "정상" && cv !== "-") continue;
+    }
+
+    // 가맹점명 (전각문자/NBSP 정리)
+    const merchant = String(r[h.merchant !== undefined ? h.merchant : -1]||"")
+      .replace(/\xa0/g," ").replace(/[\uff01-\uff60]/g, c => String.fromCharCode(c.charCodeAt(0)-0xFEE0))
+      .trim();
+    if (!merchant) continue;
+
+    // 승인번호 (현대카드 NBSP 제거)
+    let approval = h.approval !== undefined
+      ? String(r[h.approval]||"").replace(/\xa0/g,"").trim() : "";
+
+    // 승인번호 없는 카드: 동일 날짜+가맹점+금액 중복건에 시퀀스 부여
+    if (!approval || approval === "-" || approval === "0") {
+      const baseKey = dateStr.replace(/-/g,"") + "_" + merchant.replace(/\s/g,"").slice(0,25) + "_" + amount;
+      const cnt = seqMap.get(baseKey) || 0;
+      if (cnt > 0) approval = "__seq" + cnt; // 시퀀스로 구분 (재업로드시 동일 순서 보장)
+      seqMap.set(baseKey, cnt + 1);
+    }
+
+    txns.push({
+      approvalNo: approval,
+      date: dateStr,
+      merchant,
+      amount,
+      installment: h.install !== undefined ? txnNormInstall(r[h.install]) : 0,
+      bizNo:    h.bizNo     !== undefined ? String(r[h.bizNo]   ||"").replace(/-/g,"").trim() : "",
+      vat:      h.vat       !== undefined ? txnNormAmt(r[h.vat])       : 0,
+      category: h.category  !== undefined ? String(r[h.category]||"").trim() : "",
+      memo:     h.memo      !== undefined ? String(r[h.memo]    ||"").trim() : "",
+      pgSubMall:h.pgSubMall !== undefined ? String(r[h.pgSubMall]||"").trim() : "",
+    });
+  }
+
+  return { detectedCompany, txns };
+}
+
+// ── CSV/텍스트 파일 파싱 (구버전 이용내역 호환) ──
+function detectAndParse(text, fname) {
+  let detectedCompany = detectCompanyFromFname(fname) || detectCompanyFromText(text);
+
+  const lines = text.split(/[\r\n]+/);
   let headerIdx = -1, cols = {};
   for (let i = 0; i < Math.min(lines.length, 30); i++) {
     const parts = lines[i].split(/,|\t/);
     const joined = parts.join("");
-    // 우리카드: No,회원,카드,요청방식,승인번호,승인일자,승인금액,...
     if (joined.includes("승인금액") && joined.includes("승인일자")) {
       headerIdx = i;
       parts.forEach((h, idx) => {
         const t = h.trim();
-        if (t === "No" || t === "NO" || t === "no") cols.no = idx;
-        if (t.includes("승인번호") || t.includes("승인No") || t.includes("거래번호")) cols.approvalNo = idx;
-        if (t.includes("승인일자") || t.includes("이용일시") || t.includes("거래일")) cols.date = idx;
-        if (t.includes("승인금액") || t.includes("이용금액") || t.includes("거래금액")) cols.amount = idx;
-        if (t.includes("가맹점") || t.includes("이용가맹점") || t.includes("상점")) cols.merchant = idx;
-        if (t.includes("취소") && !t.includes("금액")) cols.cancel = idx;
-        if (t.includes("할부")) cols.installment = idx;
+        if (/^(No|NO|no)$/.test(t)) cols.no = idx;
+        if (/승인번호|승인No|거래번호/.test(t)) cols.approvalNo = idx;
+        if (/승인일자|이용일시|거래일/.test(t)) cols.date = idx;
+        if (/승인금액|이용금액|거래금액/.test(t)) cols.amount = idx;
+        if (/가맹점|이용가맹점|상점/.test(t)) cols.merchant = idx;
+        if (/취소/.test(t) && !/금액/.test(t)) cols.cancel = idx;
+        if (/할부/.test(t)) cols.installment = idx;
       });
       break;
     }
-    // 신한/현대 등 다른 헤더 패턴
-    if (joined.includes("이용금액") && (joined.includes("이용일") || joined.includes("거래일"))) {
+    if (joined.includes("이용금액") && /이용일|거래일/.test(joined)) {
       headerIdx = i;
       parts.forEach((h, idx) => {
         const t = h.trim();
-        if (t.includes("이용일") || t.includes("거래일")) cols.date = idx;
-        if (t.includes("이용금액") || t.includes("거래금액")) cols.amount = idx;
-        if (t.includes("가맹점") || t.includes("이용처")) cols.merchant = idx;
-        if (t.includes("취소")) cols.cancel = idx;
+        if (/이용일|거래일/.test(t)) cols.date = idx;
+        if (/이용금액|거래금액/.test(t)) cols.amount = idx;
+        if (/가맹점|이용처/.test(t)) cols.merchant = idx;
+        if (/취소/.test(t)) cols.cancel = idx;
       });
       break;
     }
   }
 
   const txns = [];
-
   if (headerIdx >= 0 && cols.amount !== undefined) {
-    // 헤더 기반 파싱
-    for (let i = headerIdx + 1; i < lines.length; i++) {
+    for (let i = headerIdx+1; i < lines.length; i++) {
       const parts = lines[i].split(/,|\t/);
       if (parts.length < 3) continue;
-      const amtRaw = parts[cols.amount]?.trim().replace(/[^0-9]/g, "");
+      const amtRaw = parts[cols.amount]?.trim().replace(/[^0-9]/g,"");
       if (!amtRaw || amtRaw === "0") continue;
       const amt = Number(amtRaw);
       if (amt <= 0 || amt > 100000000) continue;
-      // 취소 건 제외
       const cancelVal = cols.cancel !== undefined ? parts[cols.cancel]?.trim() : "";
       if (cancelVal && cancelVal !== "-" && cancelVal !== "") continue;
-      const dateVal = cols.date !== undefined ? parts[cols.date]?.trim() : "";
-      const merchantVal = cols.merchant !== undefined ? parts[cols.merchant]?.trim() : "";
-      const approvalNo = cols.approvalNo !== undefined ? parts[cols.approvalNo]?.trim() : "";
-      const installment = cols.installment !== undefined ? parts[cols.installment]?.trim() : "";
-      txns.push({ approvalNo, date: dateVal, merchant: merchantVal, amount: amt, installment });
+      txns.push({
+        approvalNo: cols.approvalNo !== undefined ? parts[cols.approvalNo]?.trim() : "",
+        date: cols.date !== undefined ? parts[cols.date]?.trim() : "",
+        merchant: cols.merchant !== undefined ? parts[cols.merchant]?.trim() : "",
+        amount: amt,
+        installment: cols.installment !== undefined ? parts[cols.installment]?.trim() : "",
+        bizNo:"", vat:0, category:"", memo:"", pgSubMall:"",
+      });
     }
   } else {
-    // 폴백: 숫자 행 휴리스틱 (No로 시작하는 행)
+    // 폴백: No로 시작하는 행 (우리카드 등)
     for (const line of lines) {
       const parts = line.split(/,|\t/);
       if (parts.length < 7) continue;
-      const no = parts[0]?.trim();
-      if (!/^\d+$/.test(no)) continue;
-      const amtRaw = parts[6]?.trim().replace(/[^0-9]/g, "");
+      if (!/^\d+$/.test(parts[0]?.trim())) continue;
+      const amtRaw = parts[6]?.trim().replace(/[^0-9]/g,"");
       if (!amtRaw) continue;
       const amt = Number(amtRaw);
       if (amt <= 0) continue;
       const cancel = parts[9]?.trim();
       if (cancel && cancel !== "-") continue;
-      const approvalNo = parts[4]?.trim() || "";
-      const installment = parts[7]?.trim() || "";
-      txns.push({ approvalNo, date: parts[5]?.trim(), merchant: parts[10]?.trim(), amount: amt, installment });
+      txns.push({
+        approvalNo: parts[4]?.trim()||"",
+        date: parts[5]?.trim()||"",
+        merchant: parts[10]?.trim()||"",
+        amount: amt,
+        installment: parts[7]?.trim()||"",
+        bizNo:"", vat:0, category:"", memo:"", pgSubMall:"",
+      });
     }
   }
-
   return { detectedCompany, txns };
 }
 
@@ -644,17 +792,32 @@ function CardUploadModal({ T, cards, uid, onUpdateCards, onClose }) {
   const parseFiles = async (files) => {
     setPhase("parsing"); setErrMsg("");
     const results = [];
+    const isSpreadsheet = f => /\.(xls|xlsx)$/i.test(f.name);
+    const needXLSX = [...files].some(isSpreadsheet);
+    if (needXLSX) {
+      try { await ensureXLSX(); } catch(e) { setErrMsg("SheetJS 로드 실패 — 인터넷 연결을 확인해주세요."); setPhase("error"); return; }
+    }
+
     for (const file of files) {
       try {
         const buf = await file.arrayBuffer();
-        let text = "";
-        try { text = new TextDecoder("euc-kr").decode(buf); }
-        catch { text = new TextDecoder("utf-8",{fatal:false}).decode(buf); }
+        let detectedCompany = null, txns = [];
 
-        const { detectedCompany, txns } = detectAndParse(text, file.name);
+        if (isSpreadsheet(file)) {
+          // SheetJS로 XLS/XLSX 파싱
+          const wb = window.XLSX.read(new Uint8Array(buf), { type:"array" });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const rows = window.XLSX.utils.sheet_to_json(ws, { header:1, defval:"", raw:true });
+          ({ detectedCompany, txns } = detectAndParseRows(rows, file.name));
+        } else {
+          // CSV/텍스트
+          let text = "";
+          try { text = new TextDecoder("euc-kr").decode(buf); }
+          catch { text = new TextDecoder("utf-8",{fatal:false}).decode(buf); }
+          ({ detectedCompany, txns } = detectAndParse(text, file.name));
+        }
+
         const matchedCard = detectedCompany ? cards.find(c => c.company === detectedCompany) : null;
-
-        // 중복 체크
         const existingUIDs = new Set(existingDB.map(t => t.txnUID));
         const newTxns = [], dupTxns = [];
         for (const t of txns) {
@@ -742,7 +905,8 @@ function CardUploadModal({ T, cards, uid, onUpdateCards, onClose }) {
         <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6 }}>
           <div>
             <div style={{ fontSize:16,fontWeight:900,color:T.text }}>📂 카드 이용내역 누적 업로드</div>
-            <div style={{ fontSize:12,color:T.muted,marginTop:3 }}>여러 파일을 한꺼번에 올리세요. 승인번호 기준으로 중복을 자동 제거하고 누적 저장합니다.</div>
+            <div style={{ fontSize:12,color:T.muted,marginTop:3 }}>세금신고용 · 일반 이용내역 모두 지원 (xls/xlsx/csv). 승인번호 기준 중복 자동 제거 후 누적 저장.</div>
+            <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>지원 카드사: 현대·신한·삼성·하나·KB국민·씨티·롯데·NH농협·KJ광주·BC카드 (10개사)</div>
           </div>
           <button onClick={onClose} style={{ background:"none",border:"none",fontSize:18,cursor:"pointer",color:T.muted,padding:"0 4px" }}>✕</button>
         </div>
@@ -766,14 +930,14 @@ function CardUploadModal({ T, cards, uid, onUpdateCards, onClose }) {
                 <div style={{ marginTop:10,maxHeight:180,overflowY:"auto",borderRadius:8,border:`1px solid ${T.border}` }}>
                   <table style={{ width:"100%",borderCollapse:"collapse",fontSize:11 }}>
                     <thead><tr style={{ background:T.bg3,position:"sticky",top:0 }}>
-                      {["날짜","가맹점","할부","금액"].map(h=><th key={h} style={{ padding:"5px 8px",textAlign:h==="금액"?"right":"left",color:T.muted,fontWeight:700,borderBottom:`1px solid ${T.border}` }}>{h}</th>)}
+                      {["날짜","가맹점","분류","금액"].map(h=><th key={h} style={{ padding:"5px 8px",textAlign:h==="금액"?"right":"left",color:T.muted,fontWeight:700,borderBottom:`1px solid ${T.border}` }}>{h}</th>)}
                     </tr></thead>
                     <tbody>
                       {cTxns.map((t,i)=>(
                         <tr key={i} style={{ borderBottom:`1px solid ${T.border}`,background:i%2===0?T.bg2:T.bg3 }}>
                           <td style={{ padding:"5px 8px",color:T.muted,whiteSpace:"nowrap" }}>{(t.date||"").slice(0,10)}</td>
-                          <td style={{ padding:"5px 8px",color:T.text,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{t.merchant||"-"}</td>
-                          <td style={{ padding:"5px 8px",color:T.muted,textAlign:"center" }}>{t.installment && t.installment!=="0" && t.installment!=="-" ? t.installment+"개월" : "일시불"}</td>
+                          <td style={{ padding:"5px 8px",color:T.text,maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{t.merchant||"-"}</td>
+                          <td style={{ padding:"5px 8px",color:T.acc,maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:10 }}>{[t.category,t.memo].filter(Boolean).join(" · ")||"-"}</td>
                           <td style={{ padding:"5px 8px",textAlign:"right",color:T.warn,fontWeight:600 }}>₩ {t.amount.toLocaleString("ko-KR")}</td>
                         </tr>
                       ))}
@@ -839,6 +1003,11 @@ function CardUploadModal({ T, cards, uid, onUpdateCards, onClose }) {
                     {/* 카드 선택 */}
                     <div style={{ marginTop:10 }}>
                       <div style={{ fontSize:10,color:T.muted,fontWeight:700,marginBottom:4 }}>적용할 카드</div>
+                      {f.detectedCompany && !cards.find(c=>c.company===f.detectedCompany) && (
+                        <div style={{ fontSize:10,color:T.warn,marginBottom:4 }}>
+                          ⚠️ {f.detectedCompany} 카드가 목록에 없습니다. 해당하는 카드를 직접 선택하거나 카드 관리 탭에서 먼저 추가해주세요.
+                        </div>
+                      )}
                       <select style={{...inp}} value={f.selectedCardId} onChange={e=>changeCardId(fi,e.target.value)}>
                         <option value="">-- 카드 선택 --</option>
                         {cards.map(c=><option key={c.id} value={c.id}>{c.company}</option>)}
@@ -846,18 +1015,20 @@ function CardUploadModal({ T, cards, uid, onUpdateCards, onClose }) {
                     </div>
                     {/* 거래 상세 */}
                     {expandFile===fi && (
-                      <div style={{ marginTop:10,maxHeight:200,overflowY:"auto",borderRadius:8,border:`1px solid ${T.border}` }}>
+                      <div style={{ marginTop:10,maxHeight:220,overflowY:"auto",borderRadius:8,border:`1px solid ${T.border}` }}>
                         <table style={{ width:"100%",borderCollapse:"collapse",fontSize:11 }}>
                           <thead><tr style={{ background:T.bg2,position:"sticky",top:0 }}>
-                            {["날짜","가맹점","할부","금액","상태"].map(h=><th key={h} style={{ padding:"5px 8px",textAlign:h==="금액"?"right":"left",color:T.muted,fontWeight:700,borderBottom:`1px solid ${T.border}` }}>{h}</th>)}
+                            {["날짜","가맹점","분류/내용","할부","금액","상태"].map(h=><th key={h} style={{ padding:"5px 8px",textAlign:h==="금액"?"right":"left",color:T.muted,fontWeight:700,borderBottom:`1px solid ${T.border}` }}>{h}</th>)}
                           </tr></thead>
                           <tbody>
                             {f.allTxns.map((t,i)=>{
                               const isNew = f.newTxns.some(n=>n.approvalNo===t.approvalNo && n.amount===t.amount && n.date===t.date);
+                              const catLabel = [t.category, t.memo].filter(Boolean).join(" · ");
                               return (
                                 <tr key={i} style={{ borderBottom:`1px solid ${T.border}`,background:i%2===0?T.bg2:T.bg3,opacity:isNew?1:0.45 }}>
                                   <td style={{ padding:"5px 8px",color:T.muted,whiteSpace:"nowrap" }}>{(t.date||"").slice(0,10)}</td>
-                                  <td style={{ padding:"5px 8px",color:T.text,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{t.merchant||"-"}</td>
+                                  <td style={{ padding:"5px 8px",color:T.text,maxWidth:130,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{t.merchant||"-"}</td>
+                                  <td style={{ padding:"5px 8px",color:T.acc,maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:10 }}>{catLabel||"-"}</td>
                                   <td style={{ padding:"5px 8px",color:T.muted,textAlign:"center" }}>{t.installment && t.installment!=="0" && t.installment!=="-" ? t.installment+"개월" : "일시불"}</td>
                                   <td style={{ padding:"5px 8px",textAlign:"right",color:T.warn,fontWeight:600 }}>₩ {t.amount.toLocaleString("ko-KR")}</td>
                                   <td style={{ padding:"5px 8px",textAlign:"center" }}>

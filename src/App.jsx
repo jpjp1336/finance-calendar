@@ -492,6 +492,7 @@ function detectAndParse(text, fname) {
       parts.forEach((h, idx) => {
         const t = h.trim();
         if (t === "No" || t === "NO" || t === "no") cols.no = idx;
+        if (t.includes("승인번호") || t.includes("승인No") || t.includes("거래번호")) cols.approvalNo = idx;
         if (t.includes("승인일자") || t.includes("이용일시") || t.includes("거래일")) cols.date = idx;
         if (t.includes("승인금액") || t.includes("이용금액") || t.includes("거래금액")) cols.amount = idx;
         if (t.includes("가맹점") || t.includes("이용가맹점") || t.includes("상점")) cols.merchant = idx;
@@ -530,7 +531,9 @@ function detectAndParse(text, fname) {
       if (cancelVal && cancelVal !== "-" && cancelVal !== "") continue;
       const dateVal = cols.date !== undefined ? parts[cols.date]?.trim() : "";
       const merchantVal = cols.merchant !== undefined ? parts[cols.merchant]?.trim() : "";
-      txns.push({ date: dateVal, merchant: merchantVal, amount: amt });
+      const approvalNo = cols.approvalNo !== undefined ? parts[cols.approvalNo]?.trim() : "";
+      const installment = cols.installment !== undefined ? parts[cols.installment]?.trim() : "";
+      txns.push({ approvalNo, date: dateVal, merchant: merchantVal, amount: amt, installment });
     }
   } else {
     // 폴백: 숫자 행 휴리스틱 (No로 시작하는 행)
@@ -545,152 +548,353 @@ function detectAndParse(text, fname) {
       if (amt <= 0) continue;
       const cancel = parts[9]?.trim();
       if (cancel && cancel !== "-") continue;
-      txns.push({ date: parts[5]?.trim(), merchant: parts[10]?.trim(), amount: amt });
+      const approvalNo = parts[4]?.trim() || "";
+      const installment = parts[7]?.trim() || "";
+      txns.push({ approvalNo, date: parts[5]?.trim(), merchant: parts[10]?.trim(), amount: amt, installment });
     }
   }
 
   return { detectedCompany, txns };
 }
 
-// ─── 카드 이용내역 업로드 모달 ────────────────────────────────
-function CardUploadModal({ T, cards, onUpdate, onClose }) {
-  const [status, setStatus]   = useState("idle");
-  const [result, setResult]   = useState(null);  // { detectedCompany, txns, total, selectedCardId }
-  const [showTxns, setShowTxns] = useState(false);
-  const [errMsg, setErrMsg]   = useState("");
+// ─── 카드 이용내역 업로드 모달 (누적 DB + 중복제거) ──────────
+// Firebase 경로: users/{uid}/data/cardTxnDB
+// 구조: { txns: [ {uid, cardId, approvalNo, date, merchant, amount, installment, uploadedAt}, ... ] }
+// uid = cardId + "_" + approvalNo (중복키)  승인번호 없으면 date+merchant+amount 해시
 
-  const parseFile = async (file) => {
-    setStatus("parsing"); setErrMsg(""); setResult(null); setShowTxns(false);
-    try {
-      const buf = await file.arrayBuffer();
-      let text = "";
-      try { text = new TextDecoder("euc-kr").decode(buf); }
-      catch { text = new TextDecoder("utf-8", {fatal:false}).decode(buf); }
+function makeTxnUID(cardId, t) {
+  if (t.approvalNo && t.approvalNo !== "-" && t.approvalNo !== "") {
+    return cardId + "_" + t.approvalNo;
+  }
+  // 폴백: 날짜+가맹점+금액 조합
+  return cardId + "_" + (t.date||"").replace(/[^0-9]/g,"").slice(0,12) + "_" + (t.merchant||"").replace(/\s/g,"").slice(0,10) + "_" + t.amount;
+}
 
-      const { detectedCompany, txns } = detectAndParse(text, file.name);
+// 이번 달 결제예정 금액 계산 (할부 포함)
+// 현재 날짜 기준으로 결제일이 아직 안 지난 것 = 이번 달 청구
+// 할부는 총금액/횟수 중 아직 미납분이 이번 달 결제일에 포함됨
+// → 단순화: 이번 달 결제일 기준으로 카드 DB에서 합산
+function calcBillingFromDB(txns, cardId, payDay) {
+  const now = new Date();
+  const yr = now.getFullYear(), mo = now.getMonth(); // 0-based
 
-      if (txns.length === 0) {
-        setErrMsg("거래 내역을 파싱할 수 없습니다. 카드사 홈페이지에서 다운로드한 xls/csv 파일인지 확인해주세요.");
-        setStatus("error"); return;
+  // "이번 달 결제일"이 오늘 이후면 이번달, 이전이면 다음달 기준
+  const billDate = new Date(yr, mo, payDay);
+  // 전 달 결제일 ~ 이번 달 결제일 사이 승인된 거래가 이번 달 청구 대상
+  const prevBillDate = new Date(yr, mo - 1, payDay);
+
+  let total = 0;
+  for (const t of txns) {
+    if (t.cardId !== cardId) continue;
+    // 날짜 파싱
+    const rawDate = (t.date || "").replace(/[^0-9]/g, "");
+    if (rawDate.length < 8) continue;
+    const txDate = new Date(
+      parseInt(rawDate.slice(0,4)),
+      parseInt(rawDate.slice(4,6)) - 1,
+      parseInt(rawDate.slice(6,8))
+    );
+    if (isNaN(txDate.getTime())) continue;
+
+    const installments = parseInt(t.installment) || 1;
+
+    if (installments <= 1) {
+      // 일시불: 전 결제일 < 승인일 <= 이번 결제일
+      if (txDate > prevBillDate && txDate <= billDate) {
+        total += t.amount;
       }
-
-      const total = txns.reduce((s,t) => s + t.amount, 0);
-      const matchedCard = detectedCompany ? cards.find(c => c.company === detectedCompany) : null;
-
-      setResult({ detectedCompany, txns, total, selectedCardId: matchedCard?.id || "" });
-      setStatus("done");
-    } catch(e) {
-      setErrMsg("파싱 오류: " + e.message);
-      setStatus("error");
+    } else {
+      // 할부: 승인일부터 installments 개월에 걸쳐 매달 amount/installments 청구
+      const monthlyAmt = Math.round(t.amount / installments);
+      for (let i = 0; i < installments; i++) {
+        // i번째 회차 결제일
+        const chargeMo = txDate.getMonth() + 1 + i; // 승인월+1 부터 청구 시작
+        const chargeDate = new Date(txDate.getFullYear(), chargeMo, payDay);
+        if (chargeDate > prevBillDate && chargeDate <= billDate) {
+          total += monthlyAmt;
+        }
+      }
     }
-  };
+  }
+  return total;
+}
 
-  const apply = () => {
-    if (!result?.selectedCardId) return alert("카드를 선택해주세요.");
-    onUpdate([{ cardId: result.selectedCardId, billing: result.total }]);
-    onClose();
-  };
+function CardUploadModal({ T, cards, uid, onUpdateCards, onClose }) {
+  const [phase, setPhase]       = useState("loading"); // loading|idle|parsing|preview|saving|saved|error
+  const [existingDB, setExistingDB] = useState([]);    // 기존 Firebase 거래 배열
+  const [pendingFiles, setPendingFiles] = useState([]); // 파싱된 파일 결과 목록
+  const [errMsg, setErrMsg]     = useState("");
+  const [viewCard, setViewCard]  = useState(null);      // 상세 보기 카드 id
+  const [expandFile, setExpandFile] = useState(null);  // 파일 결과 펼치기 인덱스
 
   const inp = { width:"100%", background:T.inp, border:`1px solid ${T.border}`, borderRadius:8, padding:"9px 12px", color:T.text, fontSize:13, fontFamily:"inherit", boxSizing:"border-box" };
 
-  // 가맹점별 합계
-  const merchantSummary = result ? Object.entries(
-    result.txns.reduce((acc, t) => {
-      const key = t.merchant || "기타";
-      acc[key] = (acc[key] || 0) + t.amount;
-      return acc;
-    }, {})
-  ).sort((a,b) => b[1]-a[1]).slice(0,10) : [];
+  // 1. 기존 DB 로드
+  useEffect(() => {
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, "users", uid, "data", "cardTxnDB"));
+        if (snap.exists()) setExistingDB(snap.data().txns || []);
+      } catch(e) { console.error(e); }
+      setPhase("idle");
+    })();
+  }, [uid]);
+
+  // 2. 파일 파싱
+  const parseFiles = async (files) => {
+    setPhase("parsing"); setErrMsg("");
+    const results = [];
+    for (const file of files) {
+      try {
+        const buf = await file.arrayBuffer();
+        let text = "";
+        try { text = new TextDecoder("euc-kr").decode(buf); }
+        catch { text = new TextDecoder("utf-8",{fatal:false}).decode(buf); }
+
+        const { detectedCompany, txns } = detectAndParse(text, file.name);
+        const matchedCard = detectedCompany ? cards.find(c => c.company === detectedCompany) : null;
+
+        // 중복 체크
+        const existingUIDs = new Set(existingDB.map(t => t.txnUID));
+        const newTxns = [], dupTxns = [];
+        for (const t of txns) {
+          const uid2 = makeTxnUID(matchedCard?.id || "unknown", t);
+          if (existingUIDs.has(uid2)) dupTxns.push(t);
+          else newTxns.push({ ...t, txnUID: uid2, cardId: matchedCard?.id || "", uploadedAt: new Date().toISOString() });
+        }
+
+        results.push({
+          fileName: file.name,
+          detectedCompany,
+          selectedCardId: matchedCard?.id || "",
+          allTxns: txns,
+          newTxns,
+          dupTxns,
+          totalAmt: txns.reduce((s,t)=>s+t.amount,0),
+          newAmt: newTxns.reduce((s,t)=>s+t.amount,0),
+        });
+      } catch(e) {
+        results.push({ fileName: file.name, error: e.message });
+      }
+    }
+    setPendingFiles(prev => [...prev, ...results]);
+    setPhase("idle");
+  };
+
+  // 카드 선택 변경 시 newTxns의 cardId도 업데이트
+  const changeCardId = (fileIdx, cardId) => {
+    setPendingFiles(prev => prev.map((f, i) => {
+      if (i !== fileIdx) return f;
+      const existingUIDs = new Set(existingDB.map(t => t.txnUID));
+      const allNew = [], allDup = [];
+      for (const t of f.allTxns) {
+        const uid2 = makeTxnUID(cardId, t);
+        if (existingUIDs.has(uid2)) allDup.push(t);
+        else allNew.push({ ...t, txnUID: uid2, cardId, uploadedAt: new Date().toISOString() });
+      }
+      return { ...f, selectedCardId: cardId, newTxns: allNew, dupTxns: allDup, newAmt: allNew.reduce((s,t)=>s+t.amount,0) };
+    }));
+  };
+
+  // 3. 저장 + 카드 billing 재계산
+  const saveAll = async () => {
+    const validFiles = pendingFiles.filter(f => !f.error && f.selectedCardId && f.newTxns?.length > 0);
+    if (validFiles.length === 0) { alert("저장할 신규 거래가 없습니다."); return; }
+    setPhase("saving");
+    try {
+      // 새 거래 병합
+      const allNewTxns = validFiles.flatMap(f => f.newTxns);
+      const merged = [...existingDB, ...allNewTxns];
+      // 혹시 모를 중복 한번 더 제거 (txnUID 기준)
+      const deduped = Object.values(Object.fromEntries(merged.map(t => [t.txnUID, t])));
+
+      // Firebase 저장
+      await setDoc(doc(db, "users", uid, "data", "cardTxnDB"), { txns: deduped, updatedAt: new Date().toISOString() });
+
+      // 카드별 billing 재계산
+      const updatedCards = cards.map(c => ({
+        ...c,
+        billing: calcBillingFromDB(deduped, c.id, c.payDay)
+      }));
+      onUpdateCards(updatedCards);
+      setExistingDB(deduped);
+      setPhase("saved");
+    } catch(e) {
+      setErrMsg("저장 실패: " + e.message);
+      setPhase("error");
+    }
+  };
+
+  // 전체 DB 통계 (카드별)
+  const dbStats = cards.map(c => {
+    const cTxns = existingDB.filter(t => t.cardId === c.id);
+    return { ...c, count: cTxns.length, billing: calcBillingFromDB(existingDB, c.id, c.payDay) };
+  }).filter(c => c.count > 0);
+
+  const totalNewTxns = pendingFiles.filter(f=>!f.error).reduce((s,f)=>(s + (f.newTxns?.length||0)),0);
+  const totalDupTxns = pendingFiles.filter(f=>!f.error).reduce((s,f)=>(s + (f.dupTxns?.length||0)),0);
 
   return (
-    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:"20px 0",overflowY:"auto" }} onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:16,padding:24,width:"min(560px,95vw)",maxHeight:"90vh",overflowY:"auto" }}>
-        <div style={{ fontSize:16,fontWeight:900,color:T.text,marginBottom:4 }}>📂 카드 이용내역 업로드</div>
-        <div style={{ fontSize:12,color:T.muted,marginBottom:18 }}>카드사 홈페이지에서 다운로드한 xls/csv 파일을 업로드하세요. 카드사 형식을 자동으로 감지합니다.</div>
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"flex-start",justifyContent:"center",zIndex:1000,overflowY:"auto",padding:"24px 12px" }}>
+      <div style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:16,padding:24,width:"min(640px,98vw)" }}>
 
-        {/* 드롭존 */}
-        <label style={{ display:"block",border:`2px dashed ${status==="done"?T.ok:T.border2}`,borderRadius:12,padding:"22px 20px",textAlign:"center",cursor:"pointer",marginBottom:16,background:T.bg3,transition:"border 0.2s" }}>
-          <div style={{ fontSize:24,marginBottom:6 }}>{status==="done"?"✅":"📄"}</div>
-          <div style={{ fontSize:13,fontWeight:700,color:status==="done"?T.ok:T.acc }}>
-            {status==="done" ? `${result.txns.length}건 파싱 완료 (다른 파일 선택)` : "파일 선택 또는 드래그"}
+        {/* 헤더 */}
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6 }}>
+          <div>
+            <div style={{ fontSize:16,fontWeight:900,color:T.text }}>📂 카드 이용내역 누적 업로드</div>
+            <div style={{ fontSize:12,color:T.muted,marginTop:3 }}>여러 파일을 한꺼번에 올리세요. 승인번호 기준으로 중복을 자동 제거하고 누적 저장합니다.</div>
           </div>
-          <div style={{ fontSize:11,color:T.muted,marginTop:3 }}>xls · xlsx · csv 지원</div>
-          <input type="file" accept=".xls,.xlsx,.csv" style={{ display:"none" }} onChange={e=>e.target.files[0]&&parseFile(e.target.files[0])}/>
-        </label>
+          <button onClick={onClose} style={{ background:"none",border:"none",fontSize:18,cursor:"pointer",color:T.muted,padding:"0 4px" }}>✕</button>
+        </div>
 
-        {status==="parsing" && <div style={{ textAlign:"center",color:T.muted,fontSize:13,padding:"8px 0" }}>⏳ 파싱 중...</div>}
-        {status==="error" && <div style={{ color:T.danger,fontSize:13,background:T.danger+"15",borderRadius:8,padding:"10px 14px",marginBottom:12 }}>⚠️ {errMsg}</div>}
-
-        {status==="done" && result && (<>
-          {/* 요약 */}
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:16 }}>
-            {[
-              {l:"총 거래 건수", v:result.txns.length+"건", c:T.acc},
-              {l:"총 승인금액",  v:"₩ "+result.total.toLocaleString("ko-KR"), c:T.warn},
-              {l:"감지된 카드사",v:result.detectedCompany||"감지 실패", c:result.detectedCompany?T.ok:T.danger},
-            ].map((s,i)=>(
-              <div key={i} style={{ background:T.bg3,borderRadius:8,padding:"10px 12px",border:`1px solid ${T.border}` }}>
-                <div style={{ fontSize:10,color:T.muted,fontWeight:600,marginBottom:4 }}>{s.l}</div>
-                <div style={{ fontSize:13,fontWeight:700,color:s.c }}>{s.v}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* 카드 선택 */}
-          <div style={{ marginBottom:14 }}>
-            <div style={{ fontSize:11,color:T.muted,fontWeight:700,marginBottom:6 }}>업데이트할 카드 선택</div>
-            <select style={inp} value={result.selectedCardId} onChange={e=>setResult(r=>({...r,selectedCardId:e.target.value}))}>
-              <option value="">-- 카드를 선택하세요 --</option>
-              {cards.map(c=><option key={c.id} value={c.id}>{c.company} (현재: ₩{c.billing.toLocaleString("ko-KR")})</option>)}
-            </select>
-          </div>
-
-          {/* 가맹점별 TOP 10 */}
-          <div style={{ marginBottom:14 }}>
-            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8 }}>
-              <div style={{ fontSize:12,fontWeight:700,color:T.text }}>가맹점별 합계 (TOP 10)</div>
-              <button onClick={()=>setShowTxns(v=>!v)} style={{ fontSize:11,color:T.acc,background:"none",border:"none",cursor:"pointer",fontWeight:600 }}>{showTxns?"▲ 접기":"▼ 전체 거래 보기"}</button>
-            </div>
-            <div style={{ borderRadius:8,overflow:"hidden",border:`1px solid ${T.border}` }}>
-              {merchantSummary.map(([merchant,amt],i)=>(
-                <div key={i} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 12px",background:i%2===0?T.bg2:T.bg3,fontSize:12 }}>
-                  <span style={{ color:T.text,fontWeight:500 }}>{merchant}</span>
-                  <span style={{ color:T.warn,fontWeight:700 }}>₩ {amt.toLocaleString("ko-KR")}</span>
+        {/* 현재 DB 현황 */}
+        {phase !== "loading" && existingDB.length > 0 && (
+          <div style={{ background:T.bg3,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px 14px",marginBottom:14,marginTop:10 }}>
+            <div style={{ fontSize:11,fontWeight:700,color:T.muted,marginBottom:8 }}>📊 현재 누적 DB ({existingDB.length.toLocaleString()}건)</div>
+            <div style={{ display:"flex",flexWrap:"wrap",gap:6 }}>
+              {dbStats.map(c=>(
+                <div key={c.id} onClick={()=>setViewCard(viewCard===c.id?null:c.id)} style={{ background:T.bg2,border:`1px solid ${c.color}44`,borderLeft:`3px solid ${c.color}`,borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:11 }}>
+                  <span style={{ fontWeight:700,color:T.text }}>{c.company}</span>
+                  <span style={{ color:T.muted,marginLeft:6 }}>{c.count}건</span>
+                  <span style={{ color:T.warn,fontWeight:700,marginLeft:6 }}>₩ {c.billing.toLocaleString("ko-KR")}</span>
                 </div>
               ))}
             </div>
+            {viewCard && (() => {
+              const cTxns = existingDB.filter(t=>t.cardId===viewCard).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+              return (
+                <div style={{ marginTop:10,maxHeight:180,overflowY:"auto",borderRadius:8,border:`1px solid ${T.border}` }}>
+                  <table style={{ width:"100%",borderCollapse:"collapse",fontSize:11 }}>
+                    <thead><tr style={{ background:T.bg3,position:"sticky",top:0 }}>
+                      {["날짜","가맹점","할부","금액"].map(h=><th key={h} style={{ padding:"5px 8px",textAlign:h==="금액"?"right":"left",color:T.muted,fontWeight:700,borderBottom:`1px solid ${T.border}` }}>{h}</th>)}
+                    </tr></thead>
+                    <tbody>
+                      {cTxns.map((t,i)=>(
+                        <tr key={i} style={{ borderBottom:`1px solid ${T.border}`,background:i%2===0?T.bg2:T.bg3 }}>
+                          <td style={{ padding:"5px 8px",color:T.muted,whiteSpace:"nowrap" }}>{(t.date||"").slice(0,10)}</td>
+                          <td style={{ padding:"5px 8px",color:T.text,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{t.merchant||"-"}</td>
+                          <td style={{ padding:"5px 8px",color:T.muted,textAlign:"center" }}>{t.installment && t.installment!=="0" && t.installment!=="-" ? t.installment+"개월" : "일시불"}</td>
+                          <td style={{ padding:"5px 8px",textAlign:"right",color:T.warn,fontWeight:600 }}>₩ {t.amount.toLocaleString("ko-KR")}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
           </div>
+        )}
+        {phase === "loading" && <div style={{ textAlign:"center",color:T.muted,fontSize:13,padding:"12px 0" }}>⏳ DB 로딩 중...</div>}
 
-          {/* 전체 거래 내역 */}
-          {showTxns && (
-            <div style={{ marginBottom:14,maxHeight:240,overflowY:"auto",borderRadius:8,border:`1px solid ${T.border}` }}>
-              <table style={{ width:"100%",borderCollapse:"collapse",fontSize:11 }}>
-                <thead>
-                  <tr style={{ background:T.bg3,position:"sticky",top:0 }}>
-                    {["날짜","가맹점","금액"].map(h=>(
-                      <th key={h} style={{ padding:"7px 10px",textAlign:h==="금액"?"right":"left",color:T.muted,fontWeight:700,borderBottom:`1px solid ${T.border}` }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.txns.map((t,i)=>(
-                    <tr key={i} style={{ borderBottom:`1px solid ${T.border}`,background:i%2===0?T.bg2:T.bg3 }}>
-                      <td style={{ padding:"6px 10px",color:T.muted,whiteSpace:"nowrap" }}>{t.date?.slice(0,10)||"-"}</td>
-                      <td style={{ padding:"6px 10px",color:T.text }}>{t.merchant||"-"}</td>
-                      <td style={{ padding:"6px 10px",textAlign:"right",color:T.warn,fontWeight:600 }}>₩ {t.amount.toLocaleString("ko-KR")}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        {/* 파일 드롭존 */}
+        {phase !== "saved" && (
+          <label style={{ display:"block",border:`2px dashed ${T.border2}`,borderRadius:12,padding:"20px",textAlign:"center",cursor:"pointer",marginBottom:14,background:T.bg3 }}>
+            <div style={{ fontSize:22,marginBottom:4 }}>📄</div>
+            <div style={{ fontSize:13,fontWeight:700,color:T.acc }}>파일 선택 (여러 개 동시 가능)</div>
+            <div style={{ fontSize:11,color:T.muted,marginTop:3 }}>xls · xlsx · csv — 여러 카드사, 여러 기간 한꺼번에</div>
+            <input type="file" accept=".xls,.xlsx,.csv" multiple style={{ display:"none" }}
+              onChange={e=>e.target.files?.length && parseFiles(Array.from(e.target.files))}/>
+          </label>
+        )}
+        {phase === "parsing" && <div style={{ textAlign:"center",color:T.muted,fontSize:13,padding:"6px 0",marginBottom:10 }}>⏳ 파싱 중...</div>}
+        {phase === "error" && <div style={{ color:T.danger,fontSize:12,background:T.danger+"15",borderRadius:8,padding:"8px 12px",marginBottom:10 }}>⚠️ {errMsg}</div>}
+
+        {/* 파일별 파싱 결과 */}
+        {pendingFiles.length > 0 && (
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:12,fontWeight:700,color:T.text,marginBottom:8 }}>
+              📋 파싱 결과 — 신규 {totalNewTxns}건 추가 / 중복 {totalDupTxns}건 제외
             </div>
-          )}
-        </>)}
+            {pendingFiles.map((f, fi) => (
+              <div key={fi} style={{ background:T.bg3,border:`1px solid ${f.error?T.danger:T.border}`,borderRadius:10,padding:"12px 14px",marginBottom:8 }}>
+                {f.error ? (
+                  <div style={{ color:T.danger,fontSize:12 }}>❌ {f.fileName} — {f.error}</div>
+                ) : (
+                  <>
+                    <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:6 }}>
+                      <div>
+                        <span style={{ fontWeight:700,fontSize:13,color:T.text }}>{f.fileName}</span>
+                        <span style={{ marginLeft:8,fontSize:11,color:f.detectedCompany?T.ok:T.danger,background:(f.detectedCompany?T.ok:T.danger)+"22",borderRadius:4,padding:"1px 6px" }}>
+                          {f.detectedCompany||"카드사 미감지"}
+                        </span>
+                      </div>
+                      <button onClick={()=>setExpandFile(expandFile===fi?null:fi)} style={{ fontSize:11,color:T.acc,background:"none",border:"none",cursor:"pointer" }}>
+                        {expandFile===fi?"▲ 접기":"▼ 거래 보기"}
+                      </button>
+                    </div>
+                    {/* 통계 배지 */}
+                    <div style={{ display:"flex",gap:8,marginTop:8,flexWrap:"wrap" }}>
+                      {[
+                        {l:"전체",  v:f.allTxns.length+"건",    c:T.sub},
+                        {l:"🆕 신규",v:f.newTxns.length+"건",   c:T.ok},
+                        {l:"🔁 중복",v:f.dupTxns.length+"건",   c:T.muted},
+                        {l:"신규 합계",v:"₩ "+f.newAmt.toLocaleString("ko-KR"), c:T.warn},
+                      ].map((s,i)=>(
+                        <div key={i} style={{ background:T.bg2,borderRadius:6,padding:"4px 10px",border:`1px solid ${T.border}`,fontSize:11 }}>
+                          <span style={{ color:T.muted }}>{s.l} </span>
+                          <span style={{ fontWeight:700,color:s.c }}>{s.v}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {/* 카드 선택 */}
+                    <div style={{ marginTop:10 }}>
+                      <div style={{ fontSize:10,color:T.muted,fontWeight:700,marginBottom:4 }}>적용할 카드</div>
+                      <select style={{...inp}} value={f.selectedCardId} onChange={e=>changeCardId(fi,e.target.value)}>
+                        <option value="">-- 카드 선택 --</option>
+                        {cards.map(c=><option key={c.id} value={c.id}>{c.company}</option>)}
+                      </select>
+                    </div>
+                    {/* 거래 상세 */}
+                    {expandFile===fi && (
+                      <div style={{ marginTop:10,maxHeight:200,overflowY:"auto",borderRadius:8,border:`1px solid ${T.border}` }}>
+                        <table style={{ width:"100%",borderCollapse:"collapse",fontSize:11 }}>
+                          <thead><tr style={{ background:T.bg2,position:"sticky",top:0 }}>
+                            {["날짜","가맹점","할부","금액","상태"].map(h=><th key={h} style={{ padding:"5px 8px",textAlign:h==="금액"?"right":"left",color:T.muted,fontWeight:700,borderBottom:`1px solid ${T.border}` }}>{h}</th>)}
+                          </tr></thead>
+                          <tbody>
+                            {f.allTxns.map((t,i)=>{
+                              const isNew = f.newTxns.some(n=>n.approvalNo===t.approvalNo && n.amount===t.amount && n.date===t.date);
+                              return (
+                                <tr key={i} style={{ borderBottom:`1px solid ${T.border}`,background:i%2===0?T.bg2:T.bg3,opacity:isNew?1:0.45 }}>
+                                  <td style={{ padding:"5px 8px",color:T.muted,whiteSpace:"nowrap" }}>{(t.date||"").slice(0,10)}</td>
+                                  <td style={{ padding:"5px 8px",color:T.text,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{t.merchant||"-"}</td>
+                                  <td style={{ padding:"5px 8px",color:T.muted,textAlign:"center" }}>{t.installment && t.installment!=="0" && t.installment!=="-" ? t.installment+"개월" : "일시불"}</td>
+                                  <td style={{ padding:"5px 8px",textAlign:"right",color:T.warn,fontWeight:600 }}>₩ {t.amount.toLocaleString("ko-KR")}</td>
+                                  <td style={{ padding:"5px 8px",textAlign:"center" }}>
+                                    <span style={{ fontSize:10,color:isNew?T.ok:T.muted,fontWeight:700 }}>{isNew?"NEW":"중복"}</span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
+        {/* 저장 완료 */}
+        {phase === "saved" && (
+          <div style={{ background:T.ok+"18",border:`1px solid ${T.ok}`,borderRadius:10,padding:"14px 16px",marginBottom:14,textAlign:"center" }}>
+            <div style={{ fontSize:22,marginBottom:4 }}>✅</div>
+            <div style={{ fontWeight:800,color:T.ok,fontSize:14 }}>저장 완료!</div>
+            <div style={{ fontSize:12,color:T.muted,marginTop:4 }}>카드별 청구금액이 누적 DB 기준으로 자동 계산되어 업데이트 되었습니다.</div>
+          </div>
+        )}
+
+        {/* 버튼 */}
         <div style={{ display:"flex",gap:10,justifyContent:"flex-end",marginTop:4 }}>
-          <button onClick={onClose} style={{ background:"none",border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 18px",fontSize:13,fontWeight:700,cursor:"pointer",color:T.sub }}>취소</button>
-          {status==="done" && (
-            <button onClick={apply} disabled={!result?.selectedCardId} style={{ background:result?.selectedCardId?T.ok:"#aaa",color:"#fff",border:"none",borderRadius:8,padding:"10px 18px",fontSize:13,fontWeight:700,cursor:result?.selectedCardId?"pointer":"not-allowed" }}>
-              청구금액 업데이트
+          <button onClick={onClose} style={{ background:"none",border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 18px",fontSize:13,fontWeight:700,cursor:"pointer",color:T.sub }}>
+            {phase==="saved"?"닫기":"취소"}
+          </button>
+          {pendingFiles.length > 0 && phase !== "saved" && (
+            <button onClick={saveAll} disabled={phase==="saving"||totalNewTxns===0}
+              style={{ background:totalNewTxns>0?T.ok:"#888",color:"#fff",border:"none",borderRadius:8,padding:"10px 18px",fontSize:13,fontWeight:700,cursor:totalNewTxns>0?"pointer":"not-allowed" }}>
+              {phase==="saving" ? "저장 중..." : `💾 신규 ${totalNewTxns}건 저장 + 청구액 재계산`}
             </button>
           )}
         </div>
@@ -942,12 +1146,12 @@ function FinanceApp({ user }) {
           onSave={a=>{ if(editAccount) updateAccounts(p=>p.map(x=>x.id===a.id?a:x)); else updateAccounts(p=>[...p,a]); setShowAccountModal(false);setEditAccount(null); }}
           onClose={()=>{setShowAccountModal(false);setEditAccount(null);}}/>
       )}
-      {showUploadModal && <CardUploadModal T={T} cards={cards} onUpdate={updates=>{
-        updateCards(p=>p.map(c=>{
-          const u=updates.find(u=>u.cardId===c.id);
-          return u?{...c,billing:u.billing}:c;
-        }));
-      }} onClose={()=>setShowUploadModal(false)}/>}
+      {showUploadModal && <CardUploadModal T={T} cards={cards} uid={user.uid}
+        onUpdateCards={updatedCards=>{
+          setCards(updatedCards);
+          saveToFirebase(updatedCards, costs, dark, accounts, loans);
+        }}
+        onClose={()=>setShowUploadModal(false)}/>}
       {(showCardModal||editCard) && (
         <CardModal card={editCard} T={T}
           onSave={c=>{ if(editCard) updateCards(p=>p.map(x=>x.id===c.id?c:x)); else updateCards(p=>[...p,c]); setShowCardModal(false);setEditCard(null); }}

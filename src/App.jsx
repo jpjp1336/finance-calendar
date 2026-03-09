@@ -774,6 +774,16 @@ function CardUploadModal({ T, cards, uid, onUpdateCards, onClose }) {
   const [errMsg, setErrMsg]     = useState("");
   const [viewCard, setViewCard]  = useState(null);      // 상세 보기 카드 id
   const [expandFile, setExpandFile] = useState(null);  // 파일 결과 펼치기 인덱스
+  const [isDragOver, setIsDragOver] = useState(false); // 드래그 오버 상태
+
+  const handleDrop = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    setIsDragOver(false);
+    const files = Array.from(e.dataTransfer.files).filter(f => /\.(xls|xlsx|csv)$/i.test(f.name));
+    if (files.length) parseFiles(files);
+  };
+  const handleDragOver = (e) => { e.preventDefault(); setIsDragOver(true); };
+  const handleDragLeave = (e) => { e.preventDefault(); setIsDragOver(false); };
 
   const inp = { width:"100%", background:T.inp, border:`1px solid ${T.border}`, borderRadius:8, padding:"9px 12px", color:T.text, fontSize:13, fontFamily:"inherit", boxSizing:"border-box" };
 
@@ -952,9 +962,13 @@ function CardUploadModal({ T, cards, uid, onUpdateCards, onClose }) {
 
         {/* 파일 드롭존 */}
         {phase !== "saved" && (
-          <label style={{ display:"block",border:`2px dashed ${T.border2}`,borderRadius:12,padding:"20px",textAlign:"center",cursor:"pointer",marginBottom:14,background:T.bg3 }}>
-            <div style={{ fontSize:22,marginBottom:4 }}>📄</div>
-            <div style={{ fontSize:13,fontWeight:700,color:T.acc }}>파일 선택 (여러 개 동시 가능)</div>
+          <label
+            onDrop={handleDrop} onDragOver={handleDragOver} onDragLeave={handleDragLeave}
+            style={{ display:"block",border:`2px dashed ${isDragOver?T.acc:T.border2}`,borderRadius:12,padding:"20px",textAlign:"center",cursor:"pointer",marginBottom:14,background:isDragOver?T.acc+"18":T.bg3,transition:"all 0.15s" }}>
+            <div style={{ fontSize:22,marginBottom:4 }}>{isDragOver?"📂":"📄"}</div>
+            <div style={{ fontSize:13,fontWeight:700,color:isDragOver?T.acc:T.acc }}>
+              {isDragOver ? "여기에 놓으세요!" : "파일 선택 또는 드래그 앤 드롭"}
+            </div>
             <div style={{ fontSize:11,color:T.muted,marginTop:3 }}>xls · xlsx · csv — 여러 카드사, 여러 기간 한꺼번에</div>
             <input type="file" accept=".xls,.xlsx,.csv" multiple style={{ display:"none" }}
               onChange={e=>e.target.files?.length && parseFiles(Array.from(e.target.files))}/>

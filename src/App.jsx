@@ -135,6 +135,8 @@ const DEFAULT_LOANS = [
   { id:7, name:"KB카드론 (양해선)",          bank:"KB국민카드", balance:36118479,  rate:10.31, maturity:"2029-02-15", payDay:15, color:"#EF4444", type:"원리금균등",     totalMonths:36, startDate:"2026-03-01" },
   { id:8, name:"KB 지식산업센터 대출",      bank:"KB국민은행", balance:186000000, rate:5.7,   maturity:"2026-04-02", payDay:4,  color:"#F97316", type:"만기일시상환",   startDate:"2026-03-01",
     warning:"만기연장 예정 - 즉시 은행 협의 필요 (031-445-1111)" },
+  { id:9, name:"차량할부 (레이)",           bank:"캐피탈",     balance:2230971,   rate:2.9,   maturity:"2026-11-20", payDay:20, color:"#06B6D4", type:"원금균등",       totalMonths:9,  startDate:"2026-03-01" },
+  { id:10, name:"차량할부 (셀토스)",        bank:"캐피탈",     balance:5439550,   rate:2.9,   maturity:"2027-02-25", payDay:25, color:"#84CC16", type:"원금균등",       totalMonths:12, startDate:"2026-03-01" },
 ];
 
 const DEFAULT_ACCOUNTS = [
@@ -598,7 +600,7 @@ function FinanceApp({ user }) {
       {/* ─── 탭 ─── */}
       <div style={{ display:"flex",gap:3,padding:"8px 16px",background:dark?"#090D1F":T.bg3,borderBottom:`1px solid ${T.border}`,overflowX:"auto" }}>
         {TABS.map(t=>(
-          <button key={t} onClick={()=>{setTab(t);setSelectedDay(null);}} style={{ padding:"7px 14px",borderRadius:8,fontSize:20,fontWeight:700,cursor:"pointer",border:"none",background:tab===t?T.acc:"transparent",color:tab===t?"#fff":T.sub,whiteSpace:"nowrap",transition:"all 0.15s" }}>{t}</button>
+          <button key={t} onClick={()=>{setTab(t);setSelectedDay(null);}} style={{ padding:"7px 14px",borderRadius:8,fontSize:15,fontWeight:700,cursor:"pointer",border:"none",background:tab===t?T.acc:"transparent",color:tab===t?"#fff":T.sub,whiteSpace:"nowrap",transition:"all 0.15s" }}>{t}</button>
         ))}
       </div>
 
@@ -611,18 +613,18 @@ function FinanceApp({ user }) {
             <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8 }}>
               <div style={{ display:"flex",alignItems:"center",gap:8 }}>
                 {["‹","›"].map((a,i)=>(
-                  <button key={a} onClick={()=>{const nd=new Date(calYear,calMonth+(i?1:-1));setCalYear(nd.getFullYear());setCalMonth(nd.getMonth());setSelectedDay(null);}} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:8,color:T.sub,padding:"7px 15px",cursor:"pointer",fontSize:20 }}>{a}</button>
+                  <button key={a} onClick={()=>{const nd=new Date(calYear,calMonth+(i?1:-1));setCalYear(nd.getFullYear());setCalMonth(nd.getMonth());setSelectedDay(null);}} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:8,color:T.sub,padding:"7px 15px",cursor:"pointer",fontSize:15 }}>{a}</button>
                 ))}
-                <span style={{ fontSize:20,fontWeight:900,color:T.text,...numFont }}>{calYear}년 {calMonth+1}월</span>
-                <button onClick={()=>{setCalYear(TODAY.getFullYear());setCalMonth(TODAY.getMonth());}} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:6,color:T.muted,padding:"5px 10px",cursor:"pointer",fontSize:20 }}>오늘</button>
+                <span style={{ fontSize:15,fontWeight:900,color:T.text,...numFont }}>{calYear}년 {calMonth+1}월</span>
+                <button onClick={()=>{setCalYear(TODAY.getFullYear());setCalMonth(TODAY.getMonth());}} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:6,color:T.muted,padding:"5px 10px",cursor:"pointer",fontSize:15 }}>오늘</button>
               </div>
               <div style={{ display:"flex",gap:5,flexWrap:"wrap",alignItems:"center" }}>
                 {[{k:"card",l:"💳 카드",c:T.acc},{k:"loan",l:"🏦 대출",c:"#A78BFA"},{k:"cost",l:"🏢 고정비",c:T.warn},{k:"memo",l:"✏️ 메모",c:T.ok}].map(f=>(
-                  <button key={f.k} onClick={()=>setFilter(p=>({...p,[f.k]:!p[f.k]}))} style={{ padding:"5px 11px",borderRadius:20,fontSize:20,fontWeight:700,cursor:"pointer",border:`1px solid ${filter[f.k]?f.c+"66":T.border}`,background:filter[f.k]?f.c+"22":"transparent",color:filter[f.k]?f.c:T.muted,transition:"all 0.15s" }}>{f.l}</button>
+                  <button key={f.k} onClick={()=>setFilter(p=>({...p,[f.k]:!p[f.k]}))} style={{ padding:"5px 11px",borderRadius:20,fontSize:15,fontWeight:700,cursor:"pointer",border:`1px solid ${filter[f.k]?f.c+"66":T.border}`,background:filter[f.k]?f.c+"22":"transparent",color:filter[f.k]?f.c:T.muted,transition:"all 0.15s" }}>{f.l}</button>
                 ))}
                 <div style={{ display:"flex",background:T.bg2,borderRadius:8,border:`1px solid ${T.border}`,overflow:"hidden" }}>
                   {[["월",1],["일",0]].map(([l,v])=>(
-                    <button key={v} onClick={()=>setWeekStart(v)} style={{ padding:"5px 11px",fontSize:20,cursor:"pointer",border:"none",background:weekStart===v?T.acc:"transparent",color:weekStart===v?"#fff":T.sub,fontWeight:700 }}>{l}요일</button>
+                    <button key={v} onClick={()=>setWeekStart(v)} style={{ padding:"5px 11px",fontSize:15,cursor:"pointer",border:"none",background:weekStart===v?T.acc:"transparent",color:weekStart===v?"#fff":T.sub,fontWeight:700 }}>{l}요일</button>
                   ))}
                 </div>
               </div>
@@ -637,8 +639,8 @@ function FinanceApp({ user }) {
                 {l:"📊 총 지출",v:monthTotal.total,     c:T.danger},
               ].map(s=>(
                 <div key={s.l} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px 12px" }}>
-                  <div style={{ fontSize:15,color:T.muted,marginBottom:4 }}>{s.l}</div>
-                  <div style={{ fontSize:20,fontWeight:400,color:s.c,...numFont }}>₩{fmt(s.v)}</div>
+                  <div style={{ fontSize:13,color:T.muted,marginBottom:4 }}>{s.l}</div>
+                  <div style={{ fontSize:16,fontWeight:400,color:s.c,...numFont }}>₩{fmt(s.v)}</div>
                 </div>
               ))}
             </div>
@@ -648,7 +650,7 @@ function FinanceApp({ user }) {
               {WEEKDAYS.map((d,i)=>{
                 const isSun=(weekStart===1&&i===6)||(weekStart===0&&i===0);
                 const isSat=(weekStart===1&&i===5)||(weekStart===0&&i===6);
-                return <div key={d} style={{ textAlign:"center",padding:"7px 0",fontSize:20,fontWeight:700,color:isSun?T.danger:isSat?T.warn:T.muted }}>{d}</div>;
+                return <div key={d} style={{ textAlign:"center",padding:"7px 0",fontSize:15,fontWeight:700,color:isSun?T.danger:isSat?T.warn:T.muted }}>{d}</div>;
               })}
             </div>
 
@@ -670,16 +672,16 @@ function FinanceApp({ user }) {
                     border:`1.5px solid ${isTod?T.acc:isSel?T.border2:isSun?(dark?"#3B0A0A":"#FDD"):isSat?(dark?"#3B2200":"#FFE"):(T.border)}`,
                     transition:"all 0.12s",position:"relative"
                   }}>
-                    <div style={{ fontSize:18,fontWeight:isTod?800:400,marginBottom:3,color:isTod?T.acc:isSun?T.danger:isSat?T.warn:T.muted }}>
-                      {isTod ? <span style={{ background:T.acc,color:"#fff",borderRadius:4,padding:"1px 5px",fontSize:18 }}>오늘</span> : d}
-                      {hasMemo && <span style={{ marginLeft:3,fontSize:16,color:T.ok }}>✎</span>}
+                    <div style={{ fontSize:15,fontWeight:isTod?800:400,marginBottom:3,color:isTod?T.acc:isSun?T.danger:isSat?T.warn:T.muted }}>
+                      {isTod ? <span style={{ background:T.acc,color:"#fff",borderRadius:4,padding:"1px 5px",fontSize:15 }}>오늘</span> : d}
+                      {hasMemo && <span style={{ marginLeft:3,fontSize:13,color:T.ok }}>✎</span>}
                     </div>
                     {evs.slice(0,3).map((ev,ei)=>(
-                      <div key={ei} style={{ fontSize:16,padding:"2px 4px",borderRadius:3,marginBottom:2,background:ev.color+"28",border:`1px solid ${ev.color}55`,color:ev.color,lineHeight:1.4,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis" }}>
+                      <div key={ei} style={{ fontSize:13,padding:"2px 4px",borderRadius:3,marginBottom:2,background:ev.color+"28",border:`1px solid ${ev.color}55`,color:ev.color,lineHeight:1.4,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis" }}>
                         {ev.icon} {ev.label}
                       </div>
                     ))}
-                    {evs.length>3 && <div style={{ fontSize:16,color:T.muted,paddingLeft:2 }}>+{evs.length-3}건</div>}
+                    {evs.length>3 && <div style={{ fontSize:13,color:T.muted,paddingLeft:2 }}>+{evs.length-3}건</div>}
                   </div>
                 );
               })}

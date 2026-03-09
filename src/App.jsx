@@ -541,7 +541,7 @@ function FinanceApp({ user }) {
         ))}
       </div>
 
-      <div style={{ padding:"14px 16px",maxWidth:1000,margin:"0 auto" }}>
+      <div style={{ padding:"14px 16px",maxWidth:1600,margin:"0 auto" }}>
 
         {/* ══════════════════ 캘린더 탭 ══════════════════ */}
         {tab==="캘린더" && (
@@ -576,8 +576,8 @@ function FinanceApp({ user }) {
                 {l:"📊 총 지출",v:monthTotal.total,     c:T.danger},
               ].map(s=>(
                 <div key={s.l} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px 12px" }}>
-                  <div style={{ fontSize:10,color:T.muted,marginBottom:4 }}>{s.l}</div>
-                  <div style={{ fontSize:14,fontWeight:900,color:s.c,...numFont }}>₩{fmt(s.v)}</div>
+                  <div style={{ fontSize:20,color:T.muted,marginBottom:4 }}>{s.l}</div>
+                  <div style={{ fontSize:28,fontWeight:400,color:s.c,...numFont }}>₩{fmt(s.v)}</div>
                 </div>
               ))}
             </div>
@@ -587,7 +587,7 @@ function FinanceApp({ user }) {
               {WEEKDAYS.map((d,i)=>{
                 const isSun=(weekStart===1&&i===6)||(weekStart===0&&i===0);
                 const isSat=(weekStart===1&&i===5)||(weekStart===0&&i===6);
-                return <div key={d} style={{ textAlign:"center",padding:"7px 0",fontSize:12,fontWeight:700,color:isSun?T.danger:isSat?T.warn:T.muted }}>{d}</div>;
+                return <div key={d} style={{ textAlign:"center",padding:"7px 0",fontSize:24,fontWeight:700,color:isSun?T.danger:isSat?T.warn:T.muted }}>{d}</div>;
               })}
             </div>
 
@@ -604,21 +604,21 @@ function FinanceApp({ user }) {
                 const hasMemo = evs.some(e=>e.type==="memo");
                 return (
                   <div key={d} onClick={()=>setSelectedDay(isSel?null:d)} style={{
-                    minHeight:82,padding:"5px 5px 4px",borderRadius:7,cursor:"pointer",
+                    minHeight:164,padding:"5px 5px 4px",borderRadius:7,cursor:"pointer",
                     background:isTod?(dark?"#141D35":"#EFF6FF"):isSel?(dark?"#0D1A2E":"#F0F7FF"):isSun?(dark?"#18080A":"#FFF5F5"):isSat?(dark?"#180F00":"#FFFBF0"):T.bg2,
                     border:`1.5px solid ${isTod?T.acc:isSel?T.border2:isSun?(dark?"#3B0A0A":"#FDD"):isSat?(dark?"#3B2200":"#FFE"):(T.border)}`,
                     transition:"all 0.12s",position:"relative"
                   }}>
-                    <div style={{ fontSize:11,fontWeight:isTod?800:400,marginBottom:3,color:isTod?T.acc:isSun?T.danger:isSat?T.warn:T.muted }}>
-                      {isTod ? <span style={{ background:T.acc,color:"#fff",borderRadius:4,padding:"1px 5px",fontSize:10 }}>오늘</span> : d}
-                      {hasMemo && <span style={{ marginLeft:3,fontSize:9,color:T.ok }}>✎</span>}
+                    <div style={{ fontSize:22,fontWeight:isTod?800:400,marginBottom:3,color:isTod?T.acc:isSun?T.danger:isSat?T.warn:T.muted }}>
+                      {isTod ? <span style={{ background:T.acc,color:"#fff",borderRadius:4,padding:"1px 5px",fontSize:20 }}>오늘</span> : d}
+                      {hasMemo && <span style={{ marginLeft:3,fontSize:18,color:T.ok }}>✎</span>}
                     </div>
                     {evs.slice(0,3).map((ev,ei)=>(
-                      <div key={ei} style={{ fontSize:9,padding:"2px 4px",borderRadius:3,marginBottom:2,background:ev.color+"28",border:`1px solid ${ev.color}55`,color:ev.color,lineHeight:1.4,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis" }}>
+                      <div key={ei} style={{ fontSize:18,padding:"2px 4px",borderRadius:3,marginBottom:2,background:ev.color+"28",border:`1px solid ${ev.color}55`,color:ev.color,lineHeight:1.4,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis" }}>
                         {ev.icon} {ev.label}
                       </div>
                     ))}
-                    {evs.length>3 && <div style={{ fontSize:9,color:T.muted,paddingLeft:2 }}>+{evs.length-3}건</div>}
+                    {evs.length>3 && <div style={{ fontSize:18,color:T.muted,paddingLeft:2 }}>+{evs.length-3}건</div>}
                   </div>
                 );
               })}
@@ -702,7 +702,7 @@ function FinanceApp({ user }) {
                       {ledgerRows.map((r,i)=>(
                         <tr key={i} style={{ background:i%2===0?T.ledgerRow:T.ledgerAlt,borderBottom:`1px solid ${T.border}` }}>
                           <td style={{ padding:"8px 12px",color:T.muted,...numFont }}>{calMonth+1}</td>
-                          <td style={{ padding:"8px 12px",color:T.muted,...numFont,fontWeight:700 }}>{r.day}</td>
+                          <td style={{ padding:"8px 12px",color:T.muted,...numFont,fontWeight:400 }}>{r.day}</td>
                           <td style={{ padding:"8px 12px" }}>
                             <span style={{ display:"inline-flex",alignItems:"center",gap:6 }}>
                               <span style={{ width:8,height:8,borderRadius:2,background:r.color,flexShrink:0,display:"inline-block" }}/>
@@ -712,13 +712,13 @@ function FinanceApp({ user }) {
                               </span>
                             </span>
                           </td>
-                          <td style={{ padding:"8px 12px",textAlign:"right",color:T.ok,fontWeight:700,...numFont }}>
+                          <td style={{ padding:"8px 12px",textAlign:"right",color:T.ok,fontWeight:400,...numFont }}>
                             {r.income>0 ? fmt(r.income) : ""}
                           </td>
-                          <td style={{ padding:"8px 12px",textAlign:"right",color:T.danger,fontWeight:700,...numFont }}>
+                          <td style={{ padding:"8px 12px",textAlign:"right",color:T.danger,fontWeight:400,...numFont }}>
                             {r.expense>0 ? fmt(r.expense) : ""}
                           </td>
-                          <td style={{ padding:"8px 12px",textAlign:"right",color:r.balance>=0?T.ok:T.danger,fontWeight:700,...numFont }}>
+                          <td style={{ padding:"8px 12px",textAlign:"right",color:r.balance>=0?T.ok:T.danger,fontWeight:400,...numFont }}>
                             {fmt(Math.abs(r.balance))}{r.balance<0?" (-)":""}
                           </td>
                         </tr>
@@ -727,10 +727,10 @@ function FinanceApp({ user }) {
                     <tfoot>
                       <tr style={{ background:dark?"#090D1F":T.bg3,borderTop:`2px solid ${T.border}` }}>
                         <td colSpan={3} style={{ padding:"10px 12px",fontWeight:800,color:T.text,fontSize:13 }}>합계</td>
-                        <td style={{ padding:"10px 12px",textAlign:"right",color:T.ok,fontWeight:900,...numFont }}>
+                        <td style={{ padding:"10px 12px",textAlign:"right",color:T.ok,fontWeight:400,...numFont }}>
                           {fmt(ledgerRows.reduce((s,r)=>s+r.income,0))}
                         </td>
-                        <td style={{ padding:"10px 12px",textAlign:"right",color:T.danger,fontWeight:900,...numFont }}>
+                        <td style={{ padding:"10px 12px",textAlign:"right",color:T.danger,fontWeight:400,...numFont }}>
                           {fmt(ledgerRows.reduce((s,r)=>s+r.expense,0))}
                         </td>
                         <td style={{ padding:"10px 12px",textAlign:"right",color:T.muted,...numFont }}>—</td>

@@ -113,11 +113,13 @@ const DEFAULT_CARDS = [
   { id:3, company:"KB국민카드", limit:4000000,   payDay:25, billing:620000,  color:"#10B981" },
 ];
 const DEFAULT_COSTS = [
-  { id:1, name:"사무실 임대료",  payDay:5,  amount:1500000, color:"#10B981", category:"임대" },
-  { id:2, name:"차량 리스",      payDay:10, amount:650000,  color:"#3B82F6", category:"차량" },
-  { id:3, name:"인터넷/전화",    payDay:15, amount:120000,  color:"#F59E0B", category:"통신" },
-  { id:4, name:"사업장 보험료",  payDay:20, amount:350000,  color:"#8B5CF6", category:"보험" },
-  { id:5, name:"회계/세무",      payDay:25, amount:300000,  color:"#EC4899", category:"전문가" },
+  { id:1, name:"사무실 임대료",  payDay:5,  amount:1500000, color:"#10B981", category:"임차료" },
+  { id:2, name:"차량 리스",      payDay:10, amount:650000,  color:"#3B82F6", category:"임차료" },
+  { id:3, name:"인터넷/전화",    payDay:15, amount:120000,  color:"#F59E0B", category:"통신비" },
+  { id:4, name:"사업장 보험료",  payDay:20, amount:350000,  color:"#8B5CF6", category:"보험료" },
+  { id:5, name:"회계/세무",      payDay:25, amount:300000,  color:"#EC4899", category:"지급수수료" },
+  { id:6, name:"직원 급여",      payDay:10, amount:2000000, color:"#06B6D4", category:"인건비" },
+  { id:7, name:"택배비",         payDay:25, amount:300000,  color:"#F97316", category:"운반비" },
 ];
 const DEFAULT_LOANS = [
   { id:1, name:"하나은행 운전자금 이차보전", bank:"하나은행", balance:10000000, rate:3.609, maturity:"2026-12-07", payDay:7, color:"#3B82F6", type:"수동",
@@ -336,7 +338,7 @@ function CostModal({ T, onSave, onClose }) {
         </div>
         <div style={{ marginBottom:14 }}><div style={{ fontSize:11,color:T.muted,fontWeight:700,marginBottom:5 }}>카테고리</div>
           <select style={inp} value={form.category} onChange={e=>setForm(f=>({...f,category:e.target.value}))}>
-            {["임대","차량","통신","보험","전문가","기타"].map(c=><option key={c}>{c}</option>)}
+            {["임차료","인건비","통신비","보험료","지급수수료","운반비","수도광열비","기타"].map(c=><option key={c}>{c}</option>)}
           </select>
         </div>
         <div style={{ marginBottom:20 }}>
@@ -750,7 +752,7 @@ function FinanceApp({ user }) {
               </div>
               {ledgerOpen && (
                 <div style={{ overflowX:"auto" }}>
-                  <table style={{ width:"100%",borderCollapse:"collapse",fontSize:12 }}>
+                  <table style={{ width:"100%",borderCollapse:"collapse",fontSize:14 }}>
                     <thead>
                       <tr style={{ background:dark?"#090D1F":T.bg3 }}>
                         {["월","일","항목","계좌","입금","출금","잔액"].map(h=>(

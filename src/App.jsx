@@ -450,6 +450,255 @@ function CostModal({ T, cost, onSave, onClose }) {
   );
 }
 
+
+// ─── 카드사별 파서 ────────────────────────────────────────────
+function detectAndParse(text, fname) {
+  const flo = fname.toLowerCase();
+
+  // ── 카드사 감지 ──
+  const CARD_PATTERNS = [
+    { name:"우리카드",    fileKeys:["woori","우리카드"],    textKeys:["국내 거래승인내역","우리카드"] },
+    { name:"현대카드",    fileKeys:["hyundai","현대카드"],  textKeys:["현대카드","이용대금명세서"] },
+    { name:"신한카드",    fileKeys:["shinhan","신한"],      textKeys:["신한카드","신한"] },
+    { name:"삼성카드",    fileKeys:["samsung","삼성"],      textKeys:["삼성카드"] },
+    { name:"하나카드",    fileKeys:["hana","하나"],         textKeys:["하나카드","하나은행"] },
+    { name:"KB국민카드",  fileKeys:["kb","kbcard","국민"],  textKeys:["KB국민카드","국민카드"] },
+    { name:"롯데카드",    fileKeys:["lotte","롯데"],        textKeys:["롯데카드"] },
+    { name:"NH농협카드",  fileKeys:["nh","농협"],           textKeys:["NH농협카드","농협카드"] },
+    { name:"씨티카드",    fileKeys:["citi","씨티"],         textKeys:["씨티카드","한국씨티"] },
+    { name:"KJ광주카드",  fileKeys:["kj","gwangju","광주"], textKeys:["광주카드","KJ카드"] },
+  ];
+
+  let detectedCompany = null;
+  for (const p of CARD_PATTERNS) {
+    if (p.fileKeys.some(k => flo.includes(k))) { detectedCompany = p.name; break; }
+  }
+  if (!detectedCompany) {
+    for (const p of CARD_PATTERNS) {
+      if (p.textKeys.some(k => text.includes(k))) { detectedCompany = p.name; break; }
+    }
+  }
+
+  const lines = text.split(/[\r\n]+/);
+
+  // ── 컬럼 헤더 자동 감지 ──
+  let headerIdx = -1, cols = {};
+  for (let i = 0; i < Math.min(lines.length, 30); i++) {
+    const parts = lines[i].split(/,|\t/);
+    const joined = parts.join("");
+    // 우리카드: No,회원,카드,요청방식,승인번호,승인일자,승인금액,...
+    if (joined.includes("승인금액") && joined.includes("승인일자")) {
+      headerIdx = i;
+      parts.forEach((h, idx) => {
+        const t = h.trim();
+        if (t === "No" || t === "NO" || t === "no") cols.no = idx;
+        if (t.includes("승인일자") || t.includes("이용일시") || t.includes("거래일")) cols.date = idx;
+        if (t.includes("승인금액") || t.includes("이용금액") || t.includes("거래금액")) cols.amount = idx;
+        if (t.includes("가맹점") || t.includes("이용가맹점") || t.includes("상점")) cols.merchant = idx;
+        if (t.includes("취소") && !t.includes("금액")) cols.cancel = idx;
+        if (t.includes("할부")) cols.installment = idx;
+      });
+      break;
+    }
+    // 신한/현대 등 다른 헤더 패턴
+    if (joined.includes("이용금액") && (joined.includes("이용일") || joined.includes("거래일"))) {
+      headerIdx = i;
+      parts.forEach((h, idx) => {
+        const t = h.trim();
+        if (t.includes("이용일") || t.includes("거래일")) cols.date = idx;
+        if (t.includes("이용금액") || t.includes("거래금액")) cols.amount = idx;
+        if (t.includes("가맹점") || t.includes("이용처")) cols.merchant = idx;
+        if (t.includes("취소")) cols.cancel = idx;
+      });
+      break;
+    }
+  }
+
+  const txns = [];
+
+  if (headerIdx >= 0 && cols.amount !== undefined) {
+    // 헤더 기반 파싱
+    for (let i = headerIdx + 1; i < lines.length; i++) {
+      const parts = lines[i].split(/,|\t/);
+      if (parts.length < 3) continue;
+      const amtRaw = parts[cols.amount]?.trim().replace(/[^0-9]/g, "");
+      if (!amtRaw || amtRaw === "0") continue;
+      const amt = Number(amtRaw);
+      if (amt <= 0 || amt > 100000000) continue;
+      // 취소 건 제외
+      const cancelVal = cols.cancel !== undefined ? parts[cols.cancel]?.trim() : "";
+      if (cancelVal && cancelVal !== "-" && cancelVal !== "") continue;
+      const dateVal = cols.date !== undefined ? parts[cols.date]?.trim() : "";
+      const merchantVal = cols.merchant !== undefined ? parts[cols.merchant]?.trim() : "";
+      txns.push({ date: dateVal, merchant: merchantVal, amount: amt });
+    }
+  } else {
+    // 폴백: 숫자 행 휴리스틱 (No로 시작하는 행)
+    for (const line of lines) {
+      const parts = line.split(/,|\t/);
+      if (parts.length < 7) continue;
+      const no = parts[0]?.trim();
+      if (!/^\d+$/.test(no)) continue;
+      const amtRaw = parts[6]?.trim().replace(/[^0-9]/g, "");
+      if (!amtRaw) continue;
+      const amt = Number(amtRaw);
+      if (amt <= 0) continue;
+      const cancel = parts[9]?.trim();
+      if (cancel && cancel !== "-") continue;
+      txns.push({ date: parts[5]?.trim(), merchant: parts[10]?.trim(), amount: amt });
+    }
+  }
+
+  return { detectedCompany, txns };
+}
+
+// ─── 카드 이용내역 업로드 모달 ────────────────────────────────
+function CardUploadModal({ T, cards, onUpdate, onClose }) {
+  const [status, setStatus]   = useState("idle");
+  const [result, setResult]   = useState(null);  // { detectedCompany, txns, total, selectedCardId }
+  const [showTxns, setShowTxns] = useState(false);
+  const [errMsg, setErrMsg]   = useState("");
+
+  const parseFile = async (file) => {
+    setStatus("parsing"); setErrMsg(""); setResult(null); setShowTxns(false);
+    try {
+      const buf = await file.arrayBuffer();
+      let text = "";
+      try { text = new TextDecoder("euc-kr").decode(buf); }
+      catch { text = new TextDecoder("utf-8", {fatal:false}).decode(buf); }
+
+      const { detectedCompany, txns } = detectAndParse(text, file.name);
+
+      if (txns.length === 0) {
+        setErrMsg("거래 내역을 파싱할 수 없습니다. 카드사 홈페이지에서 다운로드한 xls/csv 파일인지 확인해주세요.");
+        setStatus("error"); return;
+      }
+
+      const total = txns.reduce((s,t) => s + t.amount, 0);
+      const matchedCard = detectedCompany ? cards.find(c => c.company === detectedCompany) : null;
+
+      setResult({ detectedCompany, txns, total, selectedCardId: matchedCard?.id || "" });
+      setStatus("done");
+    } catch(e) {
+      setErrMsg("파싱 오류: " + e.message);
+      setStatus("error");
+    }
+  };
+
+  const apply = () => {
+    if (!result?.selectedCardId) return alert("카드를 선택해주세요.");
+    onUpdate([{ cardId: result.selectedCardId, billing: result.total }]);
+    onClose();
+  };
+
+  const inp = { width:"100%", background:T.inp, border:`1px solid ${T.border}`, borderRadius:8, padding:"9px 12px", color:T.text, fontSize:13, fontFamily:"inherit", boxSizing:"border-box" };
+
+  // 가맹점별 합계
+  const merchantSummary = result ? Object.entries(
+    result.txns.reduce((acc, t) => {
+      const key = t.merchant || "기타";
+      acc[key] = (acc[key] || 0) + t.amount;
+      return acc;
+    }, {})
+  ).sort((a,b) => b[1]-a[1]).slice(0,10) : [];
+
+  return (
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:"20px 0",overflowY:"auto" }} onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:16,padding:24,width:"min(560px,95vw)",maxHeight:"90vh",overflowY:"auto" }}>
+        <div style={{ fontSize:16,fontWeight:900,color:T.text,marginBottom:4 }}>📂 카드 이용내역 업로드</div>
+        <div style={{ fontSize:12,color:T.muted,marginBottom:18 }}>카드사 홈페이지에서 다운로드한 xls/csv 파일을 업로드하세요. 카드사 형식을 자동으로 감지합니다.</div>
+
+        {/* 드롭존 */}
+        <label style={{ display:"block",border:`2px dashed ${status==="done"?T.ok:T.border2}`,borderRadius:12,padding:"22px 20px",textAlign:"center",cursor:"pointer",marginBottom:16,background:T.bg3,transition:"border 0.2s" }}>
+          <div style={{ fontSize:24,marginBottom:6 }}>{status==="done"?"✅":"📄"}</div>
+          <div style={{ fontSize:13,fontWeight:700,color:status==="done"?T.ok:T.acc }}>
+            {status==="done" ? `${result.txns.length}건 파싱 완료 (다른 파일 선택)` : "파일 선택 또는 드래그"}
+          </div>
+          <div style={{ fontSize:11,color:T.muted,marginTop:3 }}>xls · xlsx · csv 지원</div>
+          <input type="file" accept=".xls,.xlsx,.csv" style={{ display:"none" }} onChange={e=>e.target.files[0]&&parseFile(e.target.files[0])}/>
+        </label>
+
+        {status==="parsing" && <div style={{ textAlign:"center",color:T.muted,fontSize:13,padding:"8px 0" }}>⏳ 파싱 중...</div>}
+        {status==="error" && <div style={{ color:T.danger,fontSize:13,background:T.danger+"15",borderRadius:8,padding:"10px 14px",marginBottom:12 }}>⚠️ {errMsg}</div>}
+
+        {status==="done" && result && (<>
+          {/* 요약 */}
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:16 }}>
+            {[
+              {l:"총 거래 건수", v:result.txns.length+"건", c:T.acc},
+              {l:"총 승인금액",  v:"₩ "+result.total.toLocaleString("ko-KR"), c:T.warn},
+              {l:"감지된 카드사",v:result.detectedCompany||"감지 실패", c:result.detectedCompany?T.ok:T.danger},
+            ].map((s,i)=>(
+              <div key={i} style={{ background:T.bg3,borderRadius:8,padding:"10px 12px",border:`1px solid ${T.border}` }}>
+                <div style={{ fontSize:10,color:T.muted,fontWeight:600,marginBottom:4 }}>{s.l}</div>
+                <div style={{ fontSize:13,fontWeight:700,color:s.c }}>{s.v}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* 카드 선택 */}
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:11,color:T.muted,fontWeight:700,marginBottom:6 }}>업데이트할 카드 선택</div>
+            <select style={inp} value={result.selectedCardId} onChange={e=>setResult(r=>({...r,selectedCardId:e.target.value}))}>
+              <option value="">-- 카드를 선택하세요 --</option>
+              {cards.map(c=><option key={c.id} value={c.id}>{c.company} (현재: ₩{c.billing.toLocaleString("ko-KR")})</option>)}
+            </select>
+          </div>
+
+          {/* 가맹점별 TOP 10 */}
+          <div style={{ marginBottom:14 }}>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8 }}>
+              <div style={{ fontSize:12,fontWeight:700,color:T.text }}>가맹점별 합계 (TOP 10)</div>
+              <button onClick={()=>setShowTxns(v=>!v)} style={{ fontSize:11,color:T.acc,background:"none",border:"none",cursor:"pointer",fontWeight:600 }}>{showTxns?"▲ 접기":"▼ 전체 거래 보기"}</button>
+            </div>
+            <div style={{ borderRadius:8,overflow:"hidden",border:`1px solid ${T.border}` }}>
+              {merchantSummary.map(([merchant,amt],i)=>(
+                <div key={i} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 12px",background:i%2===0?T.bg2:T.bg3,fontSize:12 }}>
+                  <span style={{ color:T.text,fontWeight:500 }}>{merchant}</span>
+                  <span style={{ color:T.warn,fontWeight:700 }}>₩ {amt.toLocaleString("ko-KR")}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 전체 거래 내역 */}
+          {showTxns && (
+            <div style={{ marginBottom:14,maxHeight:240,overflowY:"auto",borderRadius:8,border:`1px solid ${T.border}` }}>
+              <table style={{ width:"100%",borderCollapse:"collapse",fontSize:11 }}>
+                <thead>
+                  <tr style={{ background:T.bg3,position:"sticky",top:0 }}>
+                    {["날짜","가맹점","금액"].map(h=>(
+                      <th key={h} style={{ padding:"7px 10px",textAlign:h==="금액"?"right":"left",color:T.muted,fontWeight:700,borderBottom:`1px solid ${T.border}` }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.txns.map((t,i)=>(
+                    <tr key={i} style={{ borderBottom:`1px solid ${T.border}`,background:i%2===0?T.bg2:T.bg3 }}>
+                      <td style={{ padding:"6px 10px",color:T.muted,whiteSpace:"nowrap" }}>{t.date?.slice(0,10)||"-"}</td>
+                      <td style={{ padding:"6px 10px",color:T.text }}>{t.merchant||"-"}</td>
+                      <td style={{ padding:"6px 10px",textAlign:"right",color:T.warn,fontWeight:600 }}>₩ {t.amount.toLocaleString("ko-KR")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>)}
+
+        <div style={{ display:"flex",gap:10,justifyContent:"flex-end",marginTop:4 }}>
+          <button onClick={onClose} style={{ background:"none",border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 18px",fontSize:13,fontWeight:700,cursor:"pointer",color:T.sub }}>취소</button>
+          {status==="done" && (
+            <button onClick={apply} disabled={!result?.selectedCardId} style={{ background:result?.selectedCardId?T.ok:"#aaa",color:"#fff",border:"none",borderRadius:8,padding:"10px 18px",fontSize:13,fontWeight:700,cursor:result?.selectedCardId?"pointer":"not-allowed" }}>
+              청구금액 업데이트
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── 메인 앱 ─────────────────────────────────────────────────
 function FinanceApp({ user }) {
   useEffect(()=>{
@@ -480,6 +729,7 @@ function FinanceApp({ user }) {
   const [ledgerOpen, setLedgerOpen] = useState(true);
   const [showMemoModal, setShowMemoModal] = useState(false);
   const [showCardModal, setShowCardModal] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
   const [showCostModal, setShowCostModal] = useState(false);
   const [editCost, setEditCost] = useState(null);
   const [showAccountModal, setShowAccountModal] = useState(false);
@@ -496,15 +746,22 @@ function FinanceApp({ user }) {
         const isOwner = user.uid === OWNER_UID;
         if (snap.exists()) {
           const d = snap.data();
-          const loadedCards = d.cards || (isOwner ? OWNER_CARDS : DEFAULT_CARDS);
+          let loadedCards = d.cards || (isOwner ? OWNER_CARDS : DEFAULT_CARDS);
           const loadedLoans = d.loans || (isOwner ? OWNER_LOANS : DEFAULT_LOANS);
+          // 오너: Firebase 카드 billing을 OWNER_CARDS 최신값으로 동기화
+          if (isOwner && d.cards) {
+            loadedCards = d.cards.map(c => {
+              const master = OWNER_CARDS.find(o => o.id === c.id);
+              return master ? { ...c, billing: master.billing } : c;
+            });
+          }
           setCards(loadedCards);
           if (d.costs)    setCosts(d.costs);
           if (d.accounts) setAccounts(d.accounts);
           setLoans(loadedLoans);
           if (d.dark !== undefined) setDark(d.dark);
-          // cards나 loans가 없었으면 바로 Firebase에 저장
-          if (!d.cards || !d.loans) {
+          // cards나 loans가 없었으면 or billing 동기화 후 바로 Firebase에 저장
+          if (!d.cards || !d.loans || (isOwner && d.cards)) {
             await setDoc(doc(db, "users", user.uid, "data", "settings"), {
               ...d, cards:loadedCards, loans:loadedLoans
             }, { merge:true });
@@ -685,6 +942,12 @@ function FinanceApp({ user }) {
           onSave={a=>{ if(editAccount) updateAccounts(p=>p.map(x=>x.id===a.id?a:x)); else updateAccounts(p=>[...p,a]); setShowAccountModal(false);setEditAccount(null); }}
           onClose={()=>{setShowAccountModal(false);setEditAccount(null);}}/>
       )}
+      {showUploadModal && <CardUploadModal T={T} cards={cards} onUpdate={updates=>{
+        updateCards(p=>p.map(c=>{
+          const u=updates.find(u=>u.cardId===c.id);
+          return u?{...c,billing:u.billing}:c;
+        }));
+      }} onClose={()=>setShowUploadModal(false)}/>}
       {(showCardModal||editCard) && (
         <CardModal card={editCard} T={T}
           onSave={c=>{ if(editCard) updateCards(p=>p.map(x=>x.id===c.id?c:x)); else updateCards(p=>[...p,c]); setShowCardModal(false);setEditCard(null); }}
@@ -1007,17 +1270,23 @@ function FinanceApp({ user }) {
         {/* ══════════════════ 카드 관리 탭 ══════════════════ */}
         {tab==="카드 관리" && (
           <div className="fu">
-            <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:14 }}>
-              {[
-                {l:"카드 총 한도",   v:"₩ "+fmt(cards.reduce((s,c)=>s+c.limit,0)),  c:T.acc},
-                {l:"이번 달 청구",   v:"₩ "+fmt(totalCardBill),                       c:T.warn},
-                {l:"총 가용 한도",   v:"₩ "+fmt(cards.reduce((s,c)=>s+c.limit,0)-totalCardBill), c:T.ok},
-              ].map((s,i)=>(
-                <div key={i} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:10,padding:"16px 18px",boxShadow:"0 1px 3px rgba(0,0,0,0.05)" }}>
-                  <div style={{ fontSize:11,color:T.muted,fontWeight:600,marginBottom:8 }}>{s.l}</div>
-                  <div style={{ fontSize:22,fontWeight:700,color:s.c }}>{s.v}</div>
-                </div>
-              ))}
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
+              <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,flex:1,marginRight:12 }}>
+                {[
+                  {l:"카드 총 한도",   v:"₩ "+fmt(cards.reduce((s,c)=>s+c.limit,0)),  c:T.acc},
+                  {l:"이번 달 청구",   v:"₩ "+fmt(totalCardBill),                       c:T.warn},
+                  {l:"총 가용 한도",   v:"₩ "+fmt(cards.reduce((s,c)=>s+c.limit,0)-totalCardBill), c:T.ok},
+                ].map((s,i)=>(
+                  <div key={i} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:10,padding:"16px 18px",boxShadow:"0 1px 3px rgba(0,0,0,0.05)" }}>
+                    <div style={{ fontSize:11,color:T.muted,fontWeight:600,marginBottom:8 }}>{s.l}</div>
+                    <div style={{ fontSize:22,fontWeight:700,color:s.c }}>{s.v}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display:"flex",gap:8,flexShrink:0 }}>
+                <button onClick={()=>setShowUploadModal(true)} style={{ background:T.ok,color:"#fff",border:"none",borderRadius:8,padding:"10px 16px",fontSize:13,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" }}>📂 이용내역 업로드</button>
+                <button onClick={()=>setShowCardModal(true)} style={{ background:T.acc,color:"#fff",border:"none",borderRadius:8,padding:"10px 16px",fontSize:13,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" }}>+ 카드 추가</button>
+              </div>
             </div>
             {cards.map(c=>(
               <div key={c.id} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderLeft:`4px solid ${c.color}`,borderRadius:12,padding:14,marginBottom:8 }}>
@@ -1037,7 +1306,6 @@ function FinanceApp({ user }) {
                 </div>
               </div>
             ))}
-            <button onClick={()=>setShowCardModal(true)} style={{ width:"100%",padding:"12px",background:"none",border:`1.5px dashed ${T.border2}`,borderRadius:12,cursor:"pointer",fontSize:13,color:T.acc,fontWeight:700 }}>+ 카드 추가</button>
           </div>
         )}
 

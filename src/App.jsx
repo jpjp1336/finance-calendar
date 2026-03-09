@@ -1029,10 +1029,10 @@ function FinanceApp({ user }) {
 
             {/* 안내 */}
             <div style={{ marginTop:16,background:dark?"#0A1020":"#EFF6FF",border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 16px",fontSize:12,color:T.sub,lineHeight:1.7 }}>
-              💡 <b>잔액 계산 방법</b><br/>
-              전체 계좌 잔액 합계를 가계부의 시작 잔액으로 사용합니다.<br/>
-              수입/지출 메모를 기록하면 잔액이 자동으로 계산됩니다.<br/>
-              실제 은행 잔액과 맞지 않을 때는 <b>잔액 수정</b> 버튼으로 직접 조정하세요.
+              <div>{"💡 "}잔액 계산 방법</div>
+              <div style={{marginTop:4}}>전체 계좌 잔액 합계를 가계부의 시작 잔액으로 사용합니다.</div>
+              <div>수입 및 지출 메모를 기록하면 잔액이 자동으로 계산됩니다.</div>
+              <div>실제 은행 잔액과 맞지 않을 때는 <span style={{fontWeight:700}}>잔액 수정</span> 버튼으로 직접 조정하세요.</div>
             </div>
           </div>
         )}

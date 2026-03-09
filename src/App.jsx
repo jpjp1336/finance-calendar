@@ -473,7 +473,8 @@ const CARD_DETECT = [
         "카드의정석","_WOORI","WOORI"] },
   { company:"현대카드",
     fk:["hyundai","현대카드","현대"],
-    tk:["종합소득세 이용내역","hyundaicard","현대카드","네이버 현대카드","HYUNDAI CARD"] },
+    tk:["종합소득세 이용내역","hyundaicard","현대카드","네이버 현대카드","HYUNDAI CARD",
+        "카드 이용내역","결제예정일"] },  // 현대카드 일반: 타이틀+결제예정일 조합
   { company:"신한카드",
     fk:["shinhan","신한카드","신한"],
     tk:["개인사업자용 이용내역","신한카드","Shinhancard","신한 체크","신한VISA","신한Deep"] },
@@ -492,13 +493,14 @@ const CARD_DETECT = [
     tk:["세금 신고용 카드이용내역","롯데카드","LOCA","LIKIT","로카","■ 카드이용내역","■ 국내이용내역 상세"] },
   { company:"NH농협카드",
     fk:["nh농협","농협카드","농협"],
-    tk:["NH채움","NH농협카드","농협카드","NH Bank","NH농협"] },
+    tk:["NH채움","NH농협카드","농협카드","NH Bank","NH농협",
+        "브랜드 명 (V,M,J,L,B,U,D,W)","국내승인내역"] },  // 농협 일반 이용내역 고유 문구
   { company:"씨티카드",
     fk:["citi","씨티카드","씨티"],
     tk:["세금신고용 사용내역 현황","씨티카드","Citi","씨티은행","CITIBANK"] },
   { company:"KJ광주카드",
-    fk:["kj광주","gwangju","광주은행카드","광주카드"],
-    tk:["광주카드","KJ카드","광주은행","광주은행카드"] },
+    fk:["kj광주","gwangju","광주은행카드","광주카드","광주"],
+    tk:["광주카드","KJ카드","광주은행","광주은행카드","이용가맹점"] },  // 광주카드 일반: 이용가맹점 컬럼 고유
   { company:"BC카드",
     fk:["bc카드","bccard"],
     tk:["BC카드","BCcard","비씨카드"] },
@@ -527,6 +529,9 @@ function txnNormDate(s) {
     const d = new Date(Math.round((n - 25569) * 86400 * 1000));
     return d.toISOString().slice(0,10);
   }
+  // "2026년 02월 28일" 형식 (현대카드 일반)
+  const mY = s.match(/(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/);
+  if (mY) return `${mY[1]}-${mY[2].padStart(2,"0")}-${mY[3].padStart(2,"0")}`;
   const clean = s.replace(/[./]/g,"-");
   const m = clean.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (m) return `${m[1]}-${m[2].padStart(2,"0")}-${m[3].padStart(2,"0")}`;
@@ -557,7 +562,7 @@ function detectAndParseRows(rows, fname) {
   for (let i = 0; i < Math.min(rows.length, 30); i++) {
     const r = rows[i] || [];
     const joined = r.map(c => String(c||"").replace(/[\n\r\t]/g,"")).join("");
-    const hasDate  = /매출일자|사용일자|이용일(?!자)|거래일|이용일자|승인일자|승인일시/.test(joined);
+    const hasDate  = /매출일자|사용일자|이용일(?!자)|거래일자?|이용일자|승인일자|승인일시|이용일시/.test(joined);
     const hasAmt   = /금액/.test(joined);
     const hasMerch = /가맹점|이용하신/.test(joined);
     if ((hasDate || hasMerch) && hasAmt) {
@@ -565,13 +570,13 @@ function detectAndParseRows(rows, fname) {
       r.forEach((cell, ci) => {
         const t = String(cell||"").replace(/[\n\r\t ]/g,"");
         // 날짜: 매출일자/사용일자/이용일/이용일자/거래일
-        if (!h.date     && /^(매출일자|사용일자|이용일자?|거래일|승인일자|승인일시)$/.test(t)) h.date = ci;
+        if (!h.date     && /^(매출일자|사용일자|이용일자?|거래일자?|승인일자|승인일시|이용일시)$/.test(t)) h.date = ci;
         // 승인번호
         if (!h.approval && /승인번호|승인No/.test(t)) h.approval = ci;
         // 금액: 원화사용금액 우선, 매출금액(원) 포함, 이용/사용금액
         if (!h.amount   && /^원화사용금액$/.test(t)) h.amount = ci;
         if (!h.amount   && /^매출금액(\(원\))?$/.test(t)) h.amount = ci;
-        if (!h.amount   && /^(이용금액|사용금액|승인금액|승인금액\(원\)|금액|국내이용금액|국내이용금액\(원\))$/.test(t)) h.amount = ci;
+        if (!h.amount   && /^(이용금액|사용금액|승인금액|승인금액\(원\)|금액|국내이용금액|국내이용금액\(원\)|거래금액|실결제금액|실\s*결제금액)$/.test(t)) h.amount = ci;
         // 할부: 할부개월수/할부기간/할부 개월 등
         if (!h.install  && /할부.{0,3}(개월|기간|월)|개월.{0,3}할부|이용구분|^결제방법$/.test(t)) h.install = ci;
         // 가맹점
@@ -585,7 +590,7 @@ function detectAndParseRows(rows, fname) {
         if (!h.category && /^분류$/.test(t)) h.category = ci;
         if (!h.memo     && /^내용$/.test(t)) h.memo = ci;
         // 취소여부
-        if (!h.cancel   && /취소여부|취소상태|^상태$|취소일자|취소일자취소금액/.test(t)) h.cancel = ci;
+        if (!h.cancel   && /취소여부|취소상태|^상태$|취소일자|취소일자취소금액|^거래상태$/.test(t)) h.cancel = ci;
         // PG 하위몰
         if (!h.pgSubMall && /PG.*하위|하위몰/.test(t)) h.pgSubMall = ci;
       });

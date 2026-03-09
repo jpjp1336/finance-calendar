@@ -763,9 +763,9 @@ function FinanceApp({ user }) {
                 {l:"🏢 고정비", v:monthTotal.cost,      c:T.warn},
                 {l:"📊 총 지출",v:monthTotal.total,     c:T.danger},
               ].map(s=>(
-                <div key={s.l} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px 12px" }}>
-                  <div style={{ fontSize:13,color:T.muted,marginBottom:4 }}>{s.l}</div>
-                  <div style={{ fontSize:16,fontWeight:400,color:s.c,...numFont }}>₩{fmt(s.v)}</div>
+                <div key={s.l} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:10,padding:"16px 18px",boxShadow:"0 1px 3px rgba(0,0,0,0.05)" }}>
+                  <div style={{ fontSize:11,color:T.muted,marginBottom:8,fontWeight:600 }}>{s.l}</div>
+                  <div style={{ fontSize:22,fontWeight:700,color:s.c }}>₩ {fmt(s.v)}</div>
                 </div>
               ))}
             </div>

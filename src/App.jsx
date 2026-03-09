@@ -169,22 +169,22 @@ const DEFAULT_ACCOUNTS = [
 
 // ─── 테마 ────────────────────────────────────────────────────
 const DARK = {
-  bg:"#070B18", bg2:"#0F1629", bg3:"#141D35",
-  border:"#1E2D4A", border2:"#2A3F5F",
-  text:"#E2E8F0", sub:"#94A3B8", muted:"#475569",
+  bg:"#0F1117", bg2:"#1A1F2E", bg3:"#242938",
+  border:"#2D3348", border2:"#3D4560",
+  text:"#E8ECF4", sub:"#A0AABF", muted:"#5A6478",
   acc:"#3B82F6", ok:"#10B981", warn:"#F59E0B", danger:"#EF4444",
-  hdr:"linear-gradient(135deg,#0D1230,#141B3A)",
-  card:"#0F1629", inp:"#070B18",
-  ledgerBg:"#0A0E20", ledgerRow:"#0F1629", ledgerAlt:"#0D1525",
+  hdr:"#090C14",
+  card:"#1A1F2E", inp:"#242938",
+  ledgerBg:"#0F1117", ledgerRow:"#1A1F2E", ledgerAlt:"#1E2438",
 };
 const LIGHT = {
-  bg:"#F0F4FA", bg2:"#FFFFFF", bg3:"#E8EFF8",
-  border:"#D1DCF0", border2:"#B8CCE8",
-  text:"#1A2A42", sub:"#4A6FA5", muted:"#8AAAC8",
-  acc:"#2563EB", ok:"#059669", warn:"#D97706", danger:"#DC2626",
-  hdr:"linear-gradient(135deg,#1E3A6E,#2D5499)",
-  card:"#FFFFFF", inp:"#F0F4FA",
-  ledgerBg:"#E8EFF8", ledgerRow:"#FFFFFF", ledgerAlt:"#F5F8FD",
+  bg:"#F4F6FA", bg2:"#FFFFFF", bg3:"#EEF1F7",
+  border:"#E2E6EE", border2:"#C8D0E0",
+  text:"#1A2236", sub:"#4A5568", muted:"#8A96A8",
+  acc:"#0075FF", ok:"#00A86B", warn:"#F57C00", danger:"#E53E3E",
+  hdr:"#1A2236",
+  card:"#FFFFFF", inp:"#F4F6FA",
+  ledgerBg:"#F4F6FA", ledgerRow:"#FFFFFF", ledgerAlt:"#F8F9FC",
 };
 
 // ─── 계좌 모달 ───────────────────────────────────────────────
@@ -452,9 +452,16 @@ function CostModal({ T, onSave, onClose }) {
 
 // ─── 메인 앱 ─────────────────────────────────────────────────
 function FinanceApp({ user }) {
+  useEffect(()=>{
+    const link = document.createElement('link');
+    link.rel='stylesheet';
+    link.href='https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800;900&display=swap';
+    document.head.appendChild(link);
+    document.body.style.fontFamily="'Noto Sans KR',sans-serif";
+  },[]);
   const [dark, setDark] = useState(true);
   const T = dark ? DARK : LIGHT;
-  const numFont = { fontFamily:"'DM Mono',monospace" };
+  const numFont = { fontFamily:"'Noto Sans KR',sans-serif" };
 
   const [tab, setTab]         = useState("캘린더");
   const [cards, setCards]     = useState(DEFAULT_CARDS);
@@ -694,37 +701,32 @@ function FinanceApp({ user }) {
       )}
 
       {/* ─── 헤더 ─── */}
-      <div style={{ background:T.hdr,borderBottom:`1px solid ${T.border}`,padding:"13px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,zIndex:50,backdropFilter:"blur(12px)" }}>
-        <div style={{ display:"flex",alignItems:"center",gap:12 }}>
-          <div style={{ width:36,height:36,borderRadius:10,background:"linear-gradient(135deg,#3B82F6,#8B5CF6)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18 }}>💰</div>
-          <div>
-            <div style={{ fontSize:16,fontWeight:900,color:dark?"#F8FAFC":T.bg2 }}>통합 재무 캘린더</div>
-            <div style={{ fontSize:10,color:dark?"#475569":"#8AAAC8",marginTop:1 }}>카드 · 대출 · 고정비</div>
-          </div>
+      <div style={{ background:T.hdr,padding:"0 24px",display:"flex",alignItems:"center",height:72,position:"sticky",top:0,zIndex:50,boxShadow:"0 2px 10px rgba(0,0,0,0.25)", position:"relative" }}>
+        <div style={{ flex:1 }}/>
+        <div style={{ textAlign:"center" }}>
+          <div style={{ fontSize:21,fontWeight:800,color:"#fff",letterSpacing:-0.5 }}>통합 재무 캘린더</div>
+          <div style={{ fontSize:13,color:"#8A9AB5",marginTop:3 }}>카드 · 대출 · 고정비</div>
         </div>
-        <div style={{ display:"flex",alignItems:"center",gap:10 }}>
-          {saving && <span style={{ fontSize:11,color:T.warn }}>💾 저장 중...</span>}
-          <div style={{ textAlign:"right" }}>
-            <div style={{ fontSize:10,color:dark?"#475569":"#8AAAC8" }}>이번달 지출</div>
-            <div style={{ fontSize:14,fontWeight:900,color:T.danger,...numFont }}>₩{fmt(monthTotal.total)}</div>
+        <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"flex-end",gap:14 }}>
+          {saving && <span style={{ fontSize:11,color:"#F59E0B" }}>💾 저장 중...</span>}
+          <div style={{ display:"flex",alignItems:"center",gap:8,background:"rgba(255,255,255,0.08)",borderRadius:20,padding:"5px 14px",border:"1px solid rgba(255,255,255,0.12)" }}>
+            <div style={{ width:26,height:26,borderRadius:"50%",background:"#0075FF",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,color:"#fff",fontWeight:700 }}>{user.displayName?.[0]?.toUpperCase()||"U"}</div>
+            <span style={{ fontSize:12,color:"#CBD5E0" }}>{user.displayName||user.email?.split("@")[0]}</span>
+            <button onClick={()=>signOut(auth)} style={{ background:"none",border:"none",cursor:"pointer",fontSize:11,color:"#EF4444",fontWeight:600 }}>로그아웃</button>
           </div>
-          {/* 다크/라이트 모드 토글 */}
-          <button onClick={toggleDark} style={{ background:dark?"#1E2D4A":"#E8EFF8",border:`1px solid ${T.border}`,borderRadius:20,padding:"6px 14px",cursor:"pointer",fontSize:13,color:T.text,display:"flex",alignItems:"center",gap:6,fontWeight:600 }}>
-            {dark ? "☀️ 라이트" : "🌙 다크"}
+          <button onClick={toggleDark} style={{ background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:13,color:"#CBD5E0",fontWeight:600 }}>
+            {dark?"☀️":"🌙"}
           </button>
-          <div style={{ display:"flex",alignItems:"center",gap:8,padding:"6px 12px",background:dark?"#0F1629":"#fff",border:`1px solid ${T.border}`,borderRadius:20 }}>
-            <div style={{ width:24,height:24,borderRadius:"50%",background:"linear-gradient(135deg,#3B82F6,#8B5CF6)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#fff",fontWeight:700 }}>{user.displayName?.[0]?.toUpperCase()||"U"}</div>
-            <span style={{ fontSize:12,color:T.sub }}>{user.displayName||user.email?.split("@")[0]}</span>
-            <button onClick={()=>signOut(auth)} style={{ background:"none",border:"none",cursor:"pointer",fontSize:11,color:T.muted }}>로그아웃</button>
-          </div>
         </div>
       </div>
 
       {/* ─── 탭 ─── */}
-      <div style={{ display:"flex",gap:3,padding:"8px 16px",background:dark?"#090D1F":T.bg3,borderBottom:`1px solid ${T.border}`,overflowX:"auto" }}>
-        {TABS.map(t=>(
-          <button key={t} onClick={()=>{setTab(t);setSelectedDay(null);}} style={{ padding:"7px 14px",borderRadius:8,fontSize:15,fontWeight:700,cursor:"pointer",border:"none",background:tab===t?T.acc:"transparent",color:tab===t?"#fff":T.sub,whiteSpace:"nowrap",transition:"all 0.15s" }}>{t}</button>
-        ))}
+      <div style={{ background:T.bg2,borderBottom:`1px solid ${T.border}`,overflowX:"auto" }}>
+        <div style={{ maxWidth:1600,margin:"0 auto",padding:"0 24px",display:"flex" }}>
+          {TABS.map(t=>(
+            <button key={t} onClick={()=>{setTab(t);setSelectedDay(null);}} style={{ padding:"13px 18px",fontSize:14,fontWeight:tab===t?700:500,cursor:"pointer",border:"none",background:"transparent",color:tab===t?T.acc:T.sub,borderBottom:tab===t?`2.5px solid ${T.acc}`:"2.5px solid transparent",whiteSpace:"nowrap",transition:"all 0.15s" }}>{t}</button>
+          ))}
+        </div>
       </div>
 
       <div style={{ padding:"14px 16px",maxWidth:1600,margin:"0 auto" }}>
@@ -773,17 +775,17 @@ function FinanceApp({ user }) {
               {/* 캘린더 본체 */}
               <div style={{ flex:1,minWidth:0 }}>
                 {/* 요일 헤더 */}
-                <div style={{ display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:2 }}>
+                <div style={{ display:"grid",gridTemplateColumns:"repeat(7,1fr)",borderBottom:`1px solid ${T.border}` }}>
                   {WEEKDAYS.map((d,i)=>{
                     const isSun=(weekStart===1&&i===6)||(weekStart===0&&i===0);
                     const isSat=(weekStart===1&&i===5)||(weekStart===0&&i===6);
-                    return <div key={d} style={{ textAlign:"center",padding:"7px 0",fontSize:15,fontWeight:700,color:isSun?T.danger:isSat?T.warn:T.muted }}>{d}</div>;
+                    return <div key={d} style={{ textAlign:"center",padding:"8px 0",fontSize:13,fontWeight:600,color:isSun?T.danger:isSat?T.warn:T.muted }}>{d}</div>;
                   })}
                 </div>
 
                 {/* 날짜 그리드 */}
-                <div style={{ display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2 }}>
-                  {Array.from({length:firstDay},(_,i)=><div key={"e"+i}/>)}
+                <div style={{ display:"grid",gridTemplateColumns:"repeat(7,1fr)" }}>
+                  {Array.from({length:firstDay},(_,i)=><div key={"e"+i} style={{ minHeight:164,borderRight:`1px solid ${T.border}`,borderBottom:`1px solid ${T.border}` }}/>)}
                   {Array.from({length:daysInMonth},(_,i)=>{
                     const d = i+1;
                     const evs = calEvents[d]||[];
@@ -794,9 +796,11 @@ function FinanceApp({ user }) {
                     const hasMemo = evs.some(e=>e.type==="memo");
                     return (
                       <div key={d} onClick={()=>setSelectedDay(isSel?null:d)} style={{
-                        minHeight:164,padding:"5px 5px 4px",borderRadius:7,cursor:"pointer",
-                        background:isTod?(dark?"#141D35":"#EFF6FF"):isSel?(dark?"#0D1A2E":"#F0F7FF"):isSun?(dark?"#18080A":"#FFF5F5"):isSat?(dark?"#180F00":"#FFFBF0"):T.bg2,
-                        border:`1.5px solid ${isTod?T.acc:isSel?T.border2:isSun?(dark?"#3B0A0A":"#FDD"):isSat?(dark?"#3B2200":"#FFE"):(T.border)}`,
+                        minHeight:164,padding:"6px 6px 4px",cursor:"pointer",
+                        background:isTod?(dark?"#1a2a4a":"#EBF3FF"):isSel?(dark?"#0D1A2E":"#F0F7FF"):T.bg2,
+                        borderRight:`1px solid ${T.border}`,
+                        borderBottom:`1px solid ${T.border}`,
+                        outline: isTod?`2px solid ${T.acc} inset`:isSel?`1.5px solid ${T.acc} inset`:"none",
                         transition:"all 0.12s",position:"relative"
                       }}>
                         <div style={{ fontSize:15,fontWeight:isTod?800:400,marginBottom:3,color:isTod?T.acc:isSun?T.danger:isSat?T.warn:T.muted }}>
@@ -816,7 +820,7 @@ function FinanceApp({ user }) {
               </div>
 
               {/* 오른쪽 사이드 패널 */}
-              <div style={{ width:300,flexShrink:0,position:"sticky",top:80 }}>
+              <div style={{ width:300,flexShrink:0,position:"sticky",top:124 }}>
                 {selectedDay ? (
                   <div style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:14,padding:16 }}>
                     <div style={{ marginBottom:12 }}>

@@ -108,9 +108,16 @@ function getLoanWithSchedule(loan) {
 
 // ─── 기본 데이터 ──────────────────────────────────────────────
 const DEFAULT_CARDS = [
-  { id:1, company:"신한카드",   limit:5000000,   payDay:15, billing:850000,  color:"#3B82F6" },
-  { id:2, company:"현대카드",   limit:3000000,   payDay:22, billing:430000,  color:"#8B5CF6" },
-  { id:3, company:"KB국민카드", limit:4000000,   payDay:25, billing:620000,  color:"#10B981" },
+  { id:1,                company:"현대카드",   limit:2200000,  payDay:12, billing:342788,  color:"#059669" },
+  { id:1772864633576,    company:"신한카드",   limit:7500000,  payDay:25, billing:3979800, color:"#2563eb" },
+  { id:1772864882224,    company:"삼성카드",   limit:16000000, payDay:26, billing:9560440, color:"#2563eb" },
+  { id:1772864965988,    company:"하나카드",   limit:5000000,  payDay:13, billing:706790,  color:"#059669" },
+  { id:1772865082800,    company:"KB국민카드", limit:20000000, payDay:20, billing:5325390, color:"#d97706" },
+  { id:1772865111030,    company:"씨티카드",   limit:30000000, payDay:20, billing:0,       color:"#2563eb" },
+  { id:1772865154382,    company:"롯데카드",   limit:50000000, payDay:14, billing:8360890, color:"#dc2626" },
+  { id:1772865199536,    company:"우리카드",   limit:20000000, payDay:14, billing:0,       color:"#2563eb" },
+  { id:1772865317906,    company:"NH농협카드", limit:13000000, payDay:14, billing:110890,  color:"#0891b2" },
+  { id:1772865460949,    company:"KJ광주카드", limit:14000000, payDay:15, billing:452680,  color:"#db2777" },
 ];
 const DEFAULT_COSTS = [
   { id:1, name:"사무실 임대료",  payDay:5,  amount:1500000, color:"#10B981", category:"임차료" },

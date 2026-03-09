@@ -880,8 +880,8 @@ function FinanceApp({ user }) {
                   <span style={{ fontSize:12,color:T.muted }}>{ledgerRows.length}건</span>
                 </div>
                 <div style={{ display:"flex",alignItems:"center",gap:16 }}>
-                  <div style={{ fontSize:12,color:T.ok,...numFont }}>수입 ₩{fmt(monthTotal.memoIncome)}</div>
-                  <div style={{ fontSize:12,color:T.danger,...numFont }}>지출 ₩{fmt(monthTotal.total)}</div>
+                  <div style={{ fontSize:13,color:T.ok,fontWeight:600 }}>수입 ₩ {fmt(monthTotal.memoIncome)}</div>
+                  <div style={{ fontSize:13,color:T.danger,fontWeight:700 }}>지출 ₩ {fmt(monthTotal.total)}</div>
                   <span style={{ color:T.muted,fontSize:16,transition:"transform 0.2s",transform:ledgerOpen?"rotate(0)":"rotate(-90deg)",display:"inline-block" }}>▾</span>
                 </div>
               </div>
@@ -901,8 +901,8 @@ function FinanceApp({ user }) {
                       )}
                       {ledgerRows.map((r,i)=>(
                         <tr key={i} style={{ background:i%2===0?T.ledgerRow:T.ledgerAlt,borderBottom:`1px solid ${T.border}` }}>
-                          <td style={{ padding:"8px 12px",color:T.muted,...numFont }}>{calMonth+1}</td>
-                          <td style={{ padding:"8px 12px",color:T.muted,...numFont,fontWeight:400 }}>{r.day}</td>
+                          <td style={{ padding:"8px 12px",color:T.muted }}>{calMonth+1}</td>
+                          <td style={{ padding:"8px 12px",color:T.muted }}>{r.day}</td>
                           <td style={{ padding:"8px 12px" }}>
                             <span style={{ display:"inline-flex",alignItems:"center",gap:6 }}>
                               <span style={{ width:8,height:8,borderRadius:2,background:r.color,flexShrink:0,display:"inline-block" }}/>
@@ -913,13 +913,13 @@ function FinanceApp({ user }) {
                             </span>
                           </td>
                           <td style={{ padding:"8px 12px",color:T.sub,fontSize:11 }}>{r.accountName||"—"}</td>
-                          <td style={{ padding:"8px 12px",textAlign:"right",color:T.ok,fontWeight:400,...numFont }}>
+                          <td style={{ padding:"8px 12px",textAlign:"right",color:T.ok,fontWeight:600 }}>
                             {r.income>0 ? fmt(r.income) : ""}
                           </td>
-                          <td style={{ padding:"8px 12px",textAlign:"right",color:T.danger,fontWeight:400,...numFont }}>
+                          <td style={{ padding:"8px 12px",textAlign:"right",color:T.danger,fontWeight:600 }}>
                             {r.expense>0 ? fmt(r.expense) : ""}
                           </td>
-                          <td style={{ padding:"8px 12px",textAlign:"right",color:r.balance>=0?T.ok:T.danger,fontWeight:400,...numFont }}>
+                          <td style={{ padding:"8px 12px",textAlign:"right",color:r.balance>=0?T.ok:T.danger,fontWeight:600 }}>
                             {fmt(Math.abs(r.balance))}{r.balance<0?" (-)":""}
                           </td>
                         </tr>
@@ -947,16 +947,16 @@ function FinanceApp({ user }) {
         {/* ══════════════════ 대시보드 탭 ══════════════════ */}
         {tab==="대시보드" && (
           <div className="fu">
-            <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:14 }}>
+            <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:14 }}>
               {[
                 {l:"총 대출 잔액",    v:fmtM(totalDebt)+"원",        c:T.danger},
-                {l:"💳 이번달 카드",  v:"₩"+fmt(totalCardBill),      c:T.acc},
-                {l:"🏦 이번달 대출",  v:"₩"+fmt(monthTotal.loan),    c:"#A78BFA"},
-                {l:"🏢 월 고정비",    v:"₩"+fmt(costs.reduce((s,c)=>s+c.amount,0)), c:T.warn},
+                {l:"💳 이번달 카드",  v:"₩ "+fmt(totalCardBill),      c:T.acc},
+                {l:"🏦 이번달 대출",  v:"₩ "+fmt(monthTotal.loan),    c:"#A78BFA"},
+                {l:"🏢 월 고정비",    v:"₩ "+fmt(costs.reduce((s,c)=>s+c.amount,0)), c:T.warn},
               ].map((s,i)=>(
-                <div key={i} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:12,padding:"14px 16px" }}>
-                  <div style={{ fontSize:10,color:T.muted,fontWeight:700,marginBottom:7 }}>{s.l}</div>
-                  <div style={{ fontSize:17,fontWeight:900,color:s.c,...numFont }}>{s.v}</div>
+                <div key={i} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:10,padding:"16px 18px",boxShadow:"0 1px 3px rgba(0,0,0,0.05)" }}>
+                  <div style={{ fontSize:11,color:T.muted,fontWeight:600,marginBottom:8 }}>{s.l}</div>
+                  <div style={{ fontSize:22,fontWeight:700,color:s.c }}>{s.v}</div>
                 </div>
               ))}
             </div>
@@ -1005,15 +1005,15 @@ function FinanceApp({ user }) {
         {/* ══════════════════ 카드 관리 탭 ══════════════════ */}
         {tab==="카드 관리" && (
           <div className="fu">
-            <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:14 }}>
+            <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:14 }}>
               {[
-                {l:"카드 총 한도",   v:"₩"+fmt(cards.reduce((s,c)=>s+c.limit,0)),                            c:T.acc},
-                {l:"이번 달 청구",   v:"₩"+fmt(totalCardBill),                                               c:T.warn},
-                {l:"총 가용 한도",   v:"₩"+fmt(cards.reduce((s,c)=>s+c.limit,0)-totalCardBill),              c:T.ok},
+                {l:"카드 총 한도",   v:"₩ "+fmt(cards.reduce((s,c)=>s+c.limit,0)),  c:T.acc},
+                {l:"이번 달 청구",   v:"₩ "+fmt(totalCardBill),                       c:T.warn},
+                {l:"총 가용 한도",   v:"₩ "+fmt(cards.reduce((s,c)=>s+c.limit,0)-totalCardBill), c:T.ok},
               ].map((s,i)=>(
-                <div key={i} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:12,padding:"14px 16px" }}>
-                  <div style={{ fontSize:10,color:T.muted,marginBottom:6 }}>{s.l}</div>
-                  <div style={{ fontSize:18,fontWeight:900,color:s.c,...numFont }}>{s.v}</div>
+                <div key={i} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:10,padding:"16px 18px",boxShadow:"0 1px 3px rgba(0,0,0,0.05)" }}>
+                  <div style={{ fontSize:11,color:T.muted,fontWeight:600,marginBottom:8 }}>{s.l}</div>
+                  <div style={{ fontSize:22,fontWeight:700,color:s.c }}>{s.v}</div>
                 </div>
               ))}
             </div>
@@ -1043,14 +1043,14 @@ function FinanceApp({ user }) {
         {tab==="대출 관리" && (
           <div className="fu">
             <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
-              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,flex:1,marginRight:12 }}>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,flex:1,marginRight:12 }}>
                 {[
-                  {l:"총 대출 잔액",    v:fmtM(totalDebt)+"원",      c:T.danger},
-                  {l:"이번달 납부 예정",v:"₩"+fmt(monthTotal.loan),  c:"#A78BFA"},
+                  {l:"총 대출 잔액",    v:fmtM(totalDebt)+"원",        c:T.danger},
+                  {l:"이번달 납부 예정",v:"₩ "+fmt(monthTotal.loan),   c:"#A78BFA"},
                 ].map((s,i)=>(
-                  <div key={i} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:12,padding:"14px 16px" }}>
-                    <div style={{ fontSize:10,color:T.muted,marginBottom:6 }}>{s.l}</div>
-                    <div style={{ fontSize:20,fontWeight:900,color:s.c,...numFont }}>{s.v}</div>
+                  <div key={i} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:10,padding:"16px 18px",boxShadow:"0 1px 3px rgba(0,0,0,0.05)" }}>
+                    <div style={{ fontSize:11,color:T.muted,fontWeight:600,marginBottom:8 }}>{s.l}</div>
+                    <div style={{ fontSize:22,fontWeight:700,color:s.c }}>{s.v}</div>
                   </div>
                 ))}
               </div>
@@ -1102,11 +1102,18 @@ function FinanceApp({ user }) {
         {tab==="고정비 관리" && (
           <div className="fu">
             <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
-              <div>
-                <div style={{ fontSize:16,fontWeight:800,color:T.text }}>🏢 사업 운영 고정비</div>
-                <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>월 총계 <span style={{ color:T.warn,fontWeight:700,...numFont }}>₩{fmt(costs.reduce((s,c)=>s+c.amount,0))}</span></div>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,flex:1,marginRight:12 }}>
+                {[
+                  {l:"🏢 월 고정비 합계", v:"₩ "+fmt(costs.reduce((s,c)=>s+c.amount,0)), c:T.warn},
+                  {l:"📋 항목 수",         v:costs.length+"개",                             c:T.sub},
+                ].map((s,i)=>(
+                  <div key={i} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:10,padding:"16px 18px",boxShadow:"0 1px 3px rgba(0,0,0,0.05)" }}>
+                    <div style={{ fontSize:11,color:T.muted,fontWeight:600,marginBottom:8 }}>{s.l}</div>
+                    <div style={{ fontSize:22,fontWeight:700,color:s.c }}>{s.v}</div>
+                  </div>
+                ))}
               </div>
-              <button onClick={()=>setShowCostModal(true)} style={{ background:T.ok,color:"#fff",border:"none",borderRadius:8,padding:"9px 16px",fontSize:13,fontWeight:700,cursor:"pointer" }}>➕ 항목 추가</button>
+              <button onClick={()=>setShowCostModal(true)} style={{ background:T.ok,color:"#fff",border:"none",borderRadius:8,padding:"10px 16px",fontSize:13,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" }}>+ 항목 추가</button>
             </div>
             {costs.map(c=>(
               <div key={c.id} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderLeft:`4px solid ${c.color}`,borderRadius:12,padding:14,marginBottom:8 }}>

@@ -468,11 +468,11 @@ function ensureXLSX() {
 const CARD_DETECT = [
   { company:"우리카드",    fk:["woori","우리카드"],          tk:["국내 거래승인내역","우리카드"] },
   { company:"현대카드",    fk:["hyundai","현대카드","현대"],  tk:["종합소득세 이용내역","hyundaicard","현대카드"] },
-  { company:"신한카드",    fk:["shinhan","신한카드","신한"],  tk:["개인사업자용 이용내역","신한카드"] },
-  { company:"삼성카드",    fk:["samsung","삼성카드","삼성"],  tk:["개인사업자용 카드 이용내역","삼성카드"] },
+  { company:"신한카드",    fk:["shinhan","신한카드","신한"],  tk:["개인사업자용 이용내역","신한카드","Shinhancard"] },
+  { company:"삼성카드",    fk:["samsung","삼성카드","삼성"],  tk:["개인사업자용 카드 이용내역","삼성카드","Samsung Card","국내이용내역","카드이용내역"] },
   { company:"하나카드",    fk:["hana","하나카드","하나"],     tk:["종합소득세이용내역조회","하나카드"] },
   { company:"KB국민카드",  fk:["kb국민","kbcard","국민카드","국민"], tk:["부가세등 신고용","KB국민카드","국민카드"] },
-  { company:"롯데카드",    fk:["lotte","롯데카드","롯데"],    tk:["세금 신고용 카드이용내역","롯데카드"] },
+  { company:"롯데카드",    fk:["lotte","롯데카드","롯데"],    tk:["세금 신고용 카드이용내역","롯데카드","LOCA","LIKIT","로카","롯데카드이용내역"] },
   { company:"NH농협카드",  fk:["nh농협","농협카드","농협"],   tk:["NH채움","NH농협카드","농협"] },
   { company:"씨티카드",    fk:["citi","씨티카드","씨티"],     tk:["세금신고용 사용내역 현황","씨티카드","citi"] },
   { company:"KJ광주카드",  fk:["kj광주","gwangju","광주은행카드","광주카드"], tk:["광주카드","KJ카드","광주은행"] },
@@ -518,11 +518,12 @@ function txnNormInstall(s) {
   return parseInt(String(s).replace(/[^0-9]/g,"")) || 0;
 }
 
-// ── XLS/XLSX rows 파싱 (세금신고용 10개사 범용) ──
-// 지원: 현대/신한/삼성/하나/KB국민/씨티/롯데/NH농협/KJ광주/BC카드
+// ── XLS/XLSX rows 파싱 (세금신고용 + 일반 이용내역 10개사 범용) ──
+// 세금신고용과 일반 이용내역 모두 파싱. 승인번호 기반 중복 제거로 교차 업로드 가능.
 function detectAndParseRows(rows, fname) {
+  // 감지 범위 20행으로 확대 (일반 이용내역은 10행 이후에 카드사 상품명 등장)
   const detectedCompany = detectCompanyFromFname(fname)
-    || detectCompanyFromText(rows.slice(0,10).map(r=>(r||[]).join("")).join("\n"));
+    || detectCompanyFromText(rows.slice(0,20).map(r=>(r||[]).join("")).join("\n"));
 
   const txns = [];
   let hdr = -1, h = {};
@@ -531,7 +532,7 @@ function detectAndParseRows(rows, fname) {
   for (let i = 0; i < Math.min(rows.length, 30); i++) {
     const r = rows[i] || [];
     const joined = r.map(c => String(c||"").replace(/[\n\r\t]/g,"")).join("");
-    const hasDate  = /매출일자|사용일자|이용일(?!자)|거래일|이용일자/.test(joined);
+    const hasDate  = /매출일자|사용일자|이용일(?!자)|거래일|이용일자|승인일자/.test(joined);
     const hasAmt   = /금액/.test(joined);
     const hasMerch = /가맹점|이용하신/.test(joined);
     if ((hasDate || hasMerch) && hasAmt) {
@@ -539,17 +540,18 @@ function detectAndParseRows(rows, fname) {
       r.forEach((cell, ci) => {
         const t = String(cell||"").replace(/[\n\r\t ]/g,"");
         // 날짜: 매출일자/사용일자/이용일/이용일자/거래일
-        if (!h.date     && /^(매출일자|사용일자|이용일자?|거래일)$/.test(t)) h.date = ci;
+        if (!h.date     && /^(매출일자|사용일자|이용일자?|거래일|승인일자)$/.test(t)) h.date = ci;
         // 승인번호
         if (!h.approval && /승인번호|승인No/.test(t)) h.approval = ci;
         // 금액: 원화사용금액 우선, 매출금액(원) 포함, 이용/사용금액
         if (!h.amount   && /^원화사용금액$/.test(t)) h.amount = ci;
         if (!h.amount   && /^매출금액(\(원\))?$/.test(t)) h.amount = ci;
-        if (!h.amount   && /^(이용금액|사용금액)$/.test(t)) h.amount = ci;
+        if (!h.amount   && /^(이용금액|사용금액|승인금액|승인금액\(원\)|금액)$/.test(t)) h.amount = ci;
         // 할부: 할부개월수/할부기간/할부 개월 등
-        if (!h.install  && /할부.{0,3}(개월|기간|월)|개월.{0,3}할부/.test(t)) h.install = ci;
+        if (!h.install  && /할부.{0,3}(개월|기간|월)|개월.{0,3}할부|^이용구분$/.test(t)) h.install = ci;
         // 가맹점
-        if (!h.merchant && /가맹점명|이용하신곳/.test(t)) h.merchant = ci;
+        // 가맹점: "가맹점명"(세금신고용), "이용가맹점"(롯데 일반), "이용하신곳"(KB) 모두 지원
+        if (!h.merchant && /가맹점명?|이용하신곳|이용가맹점/.test(t)) h.merchant = ci;
         // 사업자번호
         if (!h.bizNo    && /사업자(번호|등록번호)|가맹사업자번호/.test(t)) h.bizNo = ci;
         // 부가세
@@ -558,7 +560,7 @@ function detectAndParseRows(rows, fname) {
         if (!h.category && /^분류$/.test(t)) h.category = ci;
         if (!h.memo     && /^내용$/.test(t)) h.memo = ci;
         // 취소여부
-        if (!h.cancel   && /취소여부/.test(t)) h.cancel = ci;
+        if (!h.cancel   && /취소여부|취소상태/.test(t)) h.cancel = ci;
         // PG 하위몰
         if (!h.pgSubMall && /PG.*하위|하위몰/.test(t)) h.pgSubMall = ci;
       });
@@ -583,15 +585,17 @@ function detectAndParseRows(rows, fname) {
     const amount = txnNormAmt(r[h.amount]);
     if (amount <= 0) continue;
 
-    // 취소여부 컬럼 있으면 '정상'만 통과
+    // 취소여부: 세금신고용("정상"/"취소"), 일반 이용내역("N"=정상/"Y"=취소) 모두 지원
     if (h.cancel !== undefined) {
       const cv = String(r[h.cancel]||"").trim();
-      if (cv && cv !== "정상" && cv !== "-") continue;
+      if (/^Y$|취소/.test(cv)) continue; // Y 또는 "취소" 포함이면 제외
+      // "N", "정상", "-", "" → 정상건으로 통과
     }
 
     // 가맹점명 (전각문자/NBSP 정리)
     const merchant = String(r[h.merchant !== undefined ? h.merchant : -1]||"")
       .replace(/\xa0/g," ").replace(/[\uff01-\uff60]/g, c => String.fromCharCode(c.charCodeAt(0)-0xFEE0))
+      .replace(/㈜/g,"(주)").replace(/㈔/g,"(사)")
       .trim();
     if (!merchant) continue;
 
@@ -814,11 +818,18 @@ function CardUploadModal({ T, cards, uid, onUpdateCards, onClose }) {
         let detectedCompany = null, txns = [];
 
         if (isSpreadsheet(file)) {
-          // SheetJS로 XLS/XLSX 파싱
+          // SheetJS로 XLS/XLSX 파싱 — 데이터가 있는 시트 자동 선택
           const wb = window.XLSX.read(new Uint8Array(buf), { type:"array" });
-          const ws = wb.Sheets[wb.SheetNames[0]];
-          const rows = window.XLSX.utils.sheet_to_json(ws, { header:1, defval:"", raw:true });
-          ({ detectedCompany, txns } = detectAndParseRows(rows, file.name));
+          let bestRows = [], bestResult = { detectedCompany:null, txns:[] };
+          for (const shName of wb.SheetNames) {
+            const ws = wb.Sheets[shName];
+            const rows = window.XLSX.utils.sheet_to_json(ws, { header:1, defval:"", raw:true });
+            const result = detectAndParseRows(rows, file.name);
+            if (result.txns.length > bestResult.txns.length) {
+              bestResult = result;
+            }
+          }
+          ({ detectedCompany, txns } = bestResult);
         } else {
           // CSV/텍스트
           let text = "";
@@ -1088,6 +1099,339 @@ function CardUploadModal({ T, cards, uid, onUpdateCards, onClose }) {
   );
 }
 
+
+// ════════════════════════════════════════════════════════════
+// ─── 은행 입출금 내역 파서 & 업로드 모달 ───────────────────────
+// Firebase: users/{uid}/data/bankTxnDB
+// 구조: { txns: [{txnUID, accountId, date, time, desc, inAmt, outAmt, balance, uploadedAt}] }
+// ════════════════════════════════════════════════════════════
+
+const BANK_DETECT = [
+  { bank:"하나은행",   fk:["hana","하나은행","하나"],        tk:["하나은행","HANA BANK"] },
+  { bank:"KB국민은행", fk:["kb국민","kbstar","국민은행","kb"], tk:["KB국민은행","국민은행","KBStar","kbstar"] },
+  { bank:"NH농협은행", fk:["nh농협","nh은행","농협은행","농협"],  tk:["NH농협은행","농협은행","NH Bank"] },
+];
+function detectBankFromFname(fname) {
+  const fl = fname.toLowerCase();
+  for (const p of BANK_DETECT) { if (p.fk.some(k=>fl.includes(k))) return p.bank; }
+  return null;
+}
+function detectBankFromText(text) {
+  for (const p of BANK_DETECT) { if (p.tk.some(k=>text.includes(k))) return p.bank; }
+  return null;
+}
+function makeBankTxnUID(accountId, t) {
+  const d   = (t.date||"").replace(/[^0-9]/g,"").slice(0,8);
+  const tm  = (t.time||"").replace(/[^0-9]/g,"").slice(0,6);
+  const dsc = (t.desc||"").replace(/\s/g,"").slice(0,15);
+  const amt = (t.inAmt||0) - (t.outAmt||0);
+  return `${accountId}_${d}${tm}_${dsc}_${amt}`;
+}
+
+function parseBankRows(rows, fname) {
+  const detectedBank = detectBankFromFname(fname)
+    || detectBankFromText(rows.slice(0,12).map(r=>(r||[]).join("")).join("\n"));
+  const txns = [];
+  let hdr = -1, h = {};
+  for (let i = 0; i < Math.min(rows.length, 20); i++) {
+    const r = rows[i] || [];
+    const joined = r.map(c=>String(c||"").replace(/[\n\r\t]/g,"")).join("");
+    if (/거래일|날짜|거래일자|거래일시/.test(joined) && /출금|입금/.test(joined)) {
+      hdr = i;
+      r.forEach((cell, ci) => {
+        const t = String(cell||"").replace(/[\n\r\t ]/g,"");
+        if (!h.date    && /^(거래일|날짜|거래일자|거래일시)$/.test(t)) h.date = ci;
+        if (!h.time    && /^(거래시간|시간|처리시간)$/.test(t))        h.time = ci;
+        if (!h.desc    && /^(거래내용|내용|적요|메모|거래처)$/.test(t))  h.desc = ci;
+        if (!h.outAmt  && /^(출금|출금액|출금금액|출금\(원\))$/.test(t)) h.outAmt = ci;
+        if (!h.inAmt   && /^(입금|입금액|입금금액|입금\(원\))$/.test(t)) h.inAmt  = ci;
+        if (!h.balance && /^(잔액|잔고|잔액\(원\))$/.test(t))           h.balance = ci;
+        if (!h.note    && /^(비고|메모|거래점)$/.test(t))               h.note = ci;
+      });
+      break;
+    }
+  }
+  if (hdr < 0 || h.date === undefined) return { detectedBank, txns };
+  const seqMap = new Map();
+  for (let i = hdr+1; i < rows.length; i++) {
+    const r = rows[i] || [];
+    if (!r.some(c => String(c||"").trim())) continue;
+    const dateStr = txnNormDate(r[h.date]);
+    if (!dateStr || !dateStr.match(/^20\d{2}/)) continue;
+    const inAmt  = txnNormAmt(r[h.inAmt  !== undefined ? h.inAmt  : -1]) || 0;
+    const outAmt = txnNormAmt(r[h.outAmt !== undefined ? h.outAmt : -1]) || 0;
+    if (inAmt === 0 && outAmt === 0) continue;
+    const desc    = String(r[h.desc    !== undefined ? h.desc    : -1]||"").trim();
+    const time    = h.time    !== undefined ? String(r[h.time]   ||"").replace(/[^0-9]/g,"").slice(0,6) : "";
+    const balance = h.balance !== undefined ? txnNormAmt(r[h.balance]) : 0;
+    const note    = h.note    !== undefined ? String(r[h.note]   ||"").trim() : "";
+    const baseKey = dateStr.replace(/-/g,"") + time + "_" + desc.slice(0,15) + "_" + (inAmt-outAmt);
+    const cnt = seqMap.get(baseKey) || 0;
+    seqMap.set(baseKey, cnt+1);
+    const seqSuffix = cnt > 0 ? "_" + cnt : "";
+    txns.push({ date:dateStr, time, desc, inAmt, outAmt, balance, note, _uid_key: baseKey + seqSuffix });
+  }
+  return { detectedBank, txns };
+}
+
+// ─── 은행 내역 업로드 모달 ─────────────────────────────────────
+function BankUploadModal({ T, accounts, uid, onUpdateAccounts, onClose }) {
+  const [phase, setPhase]           = useState("loading");
+  const [existingDB, setExistingDB] = useState([]);
+  const [pendingFiles, setPendingFiles] = useState([]);
+  const [errMsg, setErrMsg]         = useState("");
+  const [expandFile, setExpandFile] = useState(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [filterType, setFilterType] = useState("전체");
+
+  const inp = { width:"100%", background:T.inp, border:`1px solid ${T.border}`, borderRadius:8, padding:"9px 12px", color:T.text, fontSize:13, fontFamily:"inherit", boxSizing:"border-box" };
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, "users", uid, "data", "bankTxnDB"));
+        if (snap.exists()) setExistingDB(snap.data().txns || []);
+      } catch(e) { console.error(e); }
+      setPhase("idle");
+    })();
+  }, [uid]);
+
+  const parseFiles = async (files) => {
+    setPhase("parsing"); setErrMsg("");
+    const results = [];
+    try { await ensureXLSX(); } catch(e) { setErrMsg("SheetJS 로드 실패"); setPhase("error"); return; }
+    for (const file of files) {
+      try {
+        const buf = await file.arrayBuffer();
+        const wb = window.XLSX.read(new Uint8Array(buf), { type:"array" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = window.XLSX.utils.sheet_to_json(ws, { header:1, defval:"", raw:true });
+        const { detectedBank, txns } = parseBankRows(rows, file.name);
+        // 계좌 자동 매칭: 이름에 은행명 포함 여부
+        const matchedAcct = detectedBank
+          ? accounts.find(a => a.name.replace(/\s/g,"").includes(detectedBank.replace(/은행$/,""))
+            || detectedBank.replace(/은행$/,"").includes(a.name.replace(/\s|사업자|개인|통장|계좌/g,"")))
+          : null;
+        const existingUIDs = new Set(existingDB.map(t => t.txnUID));
+        const newTxns = [], dupTxns = [];
+        for (const t of txns) {
+          const uid2 = makeBankTxnUID(matchedAcct?.id||"unknown", t);
+          if (existingUIDs.has(uid2)) dupTxns.push(t);
+          else newTxns.push({ ...t, txnUID:uid2, accountId:matchedAcct?.id||"", uploadedAt:new Date().toISOString() });
+        }
+        const lastBalance = txns.length > 0 ? (txns[txns.length-1].balance || 0) : 0;
+        results.push({ fileName:file.name, detectedBank, selectedAccountId:matchedAcct?.id||"", allTxns:txns, newTxns, dupTxns, lastBalance });
+      } catch(e) { results.push({ fileName:file.name, error:e.message }); }
+    }
+    setPendingFiles(prev => [...prev, ...results]);
+    setPhase("idle");
+  };
+
+  const changeAccountId = (fi, accountId) => {
+    setPendingFiles(prev => prev.map((f, i) => {
+      if (i !== fi) return f;
+      const existingUIDs = new Set(existingDB.map(t => t.txnUID));
+      const allNew = [], allDup = [];
+      for (const t of f.allTxns) {
+        const uid2 = makeBankTxnUID(accountId, t);
+        if (existingUIDs.has(uid2)) allDup.push(t);
+        else allNew.push({ ...t, txnUID:uid2, accountId, uploadedAt:new Date().toISOString() });
+      }
+      return { ...f, selectedAccountId:accountId, newTxns:allNew, dupTxns:allDup };
+    }));
+  };
+
+  const saveAll = async () => {
+    const validFiles = pendingFiles.filter(f => !f.error && f.selectedAccountId && f.newTxns?.length > 0);
+    if (!validFiles.length) { alert("저장할 신규 거래가 없습니다."); return; }
+    setPhase("saving");
+    try {
+      const allNewTxns = validFiles.flatMap(f => f.newTxns);
+      const merged = [...existingDB, ...allNewTxns];
+      const deduped = Object.values(Object.fromEntries(merged.map(t=>[t.txnUID, t])));
+      await setDoc(doc(db, "users", uid, "data", "bankTxnDB"), { txns:deduped, updatedAt:new Date().toISOString() });
+      // 계좌 잔액 갱신 (파일의 마지막 잔액 사용)
+      const updatedAccounts = accounts.map(a => {
+        const matched = validFiles.filter(f => f.selectedAccountId === a.id);
+        if (!matched.length) return a;
+        const lb = matched[matched.length-1].lastBalance;
+        return lb > 0 ? { ...a, balance:lb } : a;
+      });
+      onUpdateAccounts(updatedAccounts);
+      setExistingDB(deduped);
+      setPhase("saved");
+    } catch(e) { setErrMsg("저장 실패: " + e.message); setPhase("error"); }
+  };
+
+  const handleDrop = (e) => { e.preventDefault(); setIsDragOver(false); const files=Array.from(e.dataTransfer.files).filter(f=>/\.(xls|xlsx|csv)$/i.test(f.name)); if(files.length) parseFiles(files); };
+  const handleDragOver  = (e) => { e.preventDefault(); setIsDragOver(true); };
+  const handleDragLeave = (e) => { e.preventDefault(); setIsDragOver(false); };
+
+  const dbStats = accounts.map(a => {
+    const aTxns = existingDB.filter(t => t.accountId === a.id);
+    return { ...a, count:aTxns.length, inTotal:aTxns.reduce((s,t)=>s+(t.inAmt||0),0), outTotal:aTxns.reduce((s,t)=>s+(t.outAmt||0),0) };
+  }).filter(a => a.count > 0);
+
+  const totalNew = pendingFiles.filter(f=>!f.error).reduce((s,f)=>s+(f.newTxns?.length||0),0);
+  const totalDup = pendingFiles.filter(f=>!f.error).reduce((s,f)=>s+(f.dupTxns?.length||0),0);
+
+  return (
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"flex-start",justifyContent:"center",zIndex:1000,overflowY:"auto",padding:"24px 12px" }}>
+      <div style={{ background:T.bg2,border:`1px solid ${T.border}`,borderRadius:16,padding:24,width:"min(660px,98vw)" }}>
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6 }}>
+          <div>
+            <div style={{ fontSize:16,fontWeight:900,color:T.text }}>🏦 은행 입출금 내역 업로드</div>
+            <div style={{ fontSize:12,color:T.muted,marginTop:3 }}>하나은행 · KB국민은행 · NH농협은행 엑셀 파일 지원. 중복 자동 제거 후 누적 저장.</div>
+            <div style={{ fontSize:11,color:T.muted,marginTop:1 }}>저장 시 파일 내 마지막 잔액으로 계좌 잔액이 자동 갱신됩니다.</div>
+          </div>
+          <button onClick={onClose} style={{ background:"none",border:"none",fontSize:18,cursor:"pointer",color:T.muted,padding:"0 4px" }}>✕</button>
+        </div>
+
+        {phase !== "loading" && dbStats.length > 0 && (
+          <div style={{ background:T.bg3,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px 14px",marginBottom:14,marginTop:10 }}>
+            <div style={{ fontSize:11,fontWeight:700,color:T.muted,marginBottom:8 }}>📊 현재 누적 DB ({existingDB.length.toLocaleString()}건)</div>
+            <div style={{ display:"flex",flexWrap:"wrap",gap:6 }}>
+              {dbStats.map(a=>(
+                <div key={a.id} style={{ background:T.bg2,border:`1px solid ${a.color}44`,borderLeft:`3px solid ${a.color}`,borderRadius:6,padding:"5px 10px",fontSize:11 }}>
+                  <span style={{ fontWeight:700,color:T.text }}>{a.name}</span>
+                  <span style={{ color:T.ok,marginLeft:6,fontWeight:700 }}>↑{a.inTotal.toLocaleString("ko-KR")}</span>
+                  <span style={{ color:T.danger,marginLeft:6,fontWeight:700 }}>↓{a.outTotal.toLocaleString("ko-KR")}</span>
+                  <span style={{ color:T.muted,marginLeft:6 }}>{a.count}건</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {phase === "loading" && <div style={{ textAlign:"center",color:T.muted,fontSize:13,padding:"12px 0" }}>⏳ DB 로딩 중...</div>}
+
+        {phase !== "saved" && (
+          <label onDrop={handleDrop} onDragOver={handleDragOver} onDragLeave={handleDragLeave}
+            style={{ display:"block",border:`2px dashed ${isDragOver?T.acc:T.border2}`,borderRadius:12,padding:"20px",textAlign:"center",cursor:"pointer",marginBottom:14,background:isDragOver?T.acc+"18":T.bg3,transition:"all 0.15s" }}>
+            <div style={{ fontSize:22,marginBottom:4 }}>{isDragOver?"📂":"🏦"}</div>
+            <div style={{ fontSize:13,fontWeight:700,color:T.acc }}>{isDragOver?"여기에 놓으세요!":"파일 선택 또는 드래그 앤 드롭"}</div>
+            <div style={{ fontSize:11,color:T.muted,marginTop:3 }}>은행 앱/웹에서 내려받은 xls · xlsx 파일</div>
+            <input type="file" accept=".xls,.xlsx,.csv" multiple style={{ display:"none" }}
+              onChange={e=>e.target.files?.length && parseFiles(Array.from(e.target.files))}/>
+          </label>
+        )}
+        {phase === "parsing" && <div style={{ textAlign:"center",color:T.muted,fontSize:13,padding:"6px 0",marginBottom:10 }}>⏳ 파싱 중...</div>}
+        {phase === "error" && <div style={{ color:T.danger,fontSize:12,background:T.danger+"15",borderRadius:8,padding:"8px 12px",marginBottom:10 }}>⚠️ {errMsg}</div>}
+
+        {pendingFiles.length > 0 && (
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:12,fontWeight:700,color:T.text,marginBottom:8 }}>
+              📋 파싱 결과 — 신규 {totalNew}건 / 중복 {totalDup}건
+            </div>
+            {pendingFiles.map((f, fi) => (
+              <div key={fi} style={{ background:T.bg3,border:`1px solid ${f.error?T.danger:T.border}`,borderRadius:10,padding:"12px 14px",marginBottom:8 }}>
+                {f.error ? (
+                  <div style={{ color:T.danger,fontSize:12 }}>❌ {f.fileName} — {f.error}</div>
+                ) : (
+                  <>
+                    <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:6 }}>
+                      <div>
+                        <span style={{ fontWeight:700,fontSize:13,color:T.text }}>{f.fileName}</span>
+                        <span style={{ marginLeft:8,fontSize:11,color:f.detectedBank?T.ok:T.warn,background:(f.detectedBank?T.ok:T.warn)+"22",borderRadius:4,padding:"1px 6px" }}>
+                          {f.detectedBank||"은행 미감지"}
+                        </span>
+                      </div>
+                      <button onClick={()=>setExpandFile(expandFile===fi?null:fi)} style={{ fontSize:11,color:T.acc,background:"none",border:"none",cursor:"pointer" }}>
+                        {expandFile===fi?"▲ 접기":"▼ 내역 보기"}
+                      </button>
+                    </div>
+                    <div style={{ display:"flex",gap:8,marginTop:8,flexWrap:"wrap" }}>
+                      {[
+                        {l:"전체",   v:f.allTxns.length+"건",  c:T.sub},
+                        {l:"🆕 신규", v:f.newTxns.length+"건",  c:T.ok},
+                        {l:"🔁 중복", v:f.dupTxns.length+"건",  c:T.muted},
+                        {l:"↑입금",  v:"₩ "+f.allTxns.reduce((s,t)=>s+(t.inAmt||0),0).toLocaleString("ko-KR"), c:T.ok},
+                        {l:"↓출금",  v:"₩ "+f.allTxns.reduce((s,t)=>s+(t.outAmt||0),0).toLocaleString("ko-KR"), c:T.danger},
+                        ...(f.lastBalance>0?[{l:"최종잔액", v:"₩ "+f.lastBalance.toLocaleString("ko-KR"), c:T.warn}]:[]),
+                      ].map((s,i)=>(
+                        <div key={i} style={{ background:T.bg2,borderRadius:6,padding:"4px 10px",border:`1px solid ${T.border}`,fontSize:11 }}>
+                          <span style={{ color:T.muted }}>{s.l} </span><span style={{ fontWeight:700,color:s.c }}>{s.v}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ marginTop:10 }}>
+                      <div style={{ fontSize:10,color:T.muted,fontWeight:700,marginBottom:4 }}>적용할 계좌</div>
+                      <select style={{...inp}} value={f.selectedAccountId} onChange={e=>changeAccountId(fi,e.target.value)}>
+                        <option value="">-- 계좌 선택 --</option>
+                        {accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
+                      </select>
+                    </div>
+                    {expandFile===fi && (
+                      <div style={{ marginTop:10 }}>
+                        <div style={{ display:"flex",gap:6,marginBottom:6 }}>
+                          {["전체","입금","출금"].map(v=>(
+                            <button key={v} onClick={()=>setFilterType(v)}
+                              style={{ fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:6,border:"none",cursor:"pointer",
+                                background:filterType===v?T.acc:T.bg2, color:filterType===v?"#fff":T.muted }}>
+                              {v}
+                            </button>
+                          ))}
+                        </div>
+                        <div style={{ maxHeight:220,overflowY:"auto",borderRadius:8,border:`1px solid ${T.border}` }}>
+                          <table style={{ width:"100%",borderCollapse:"collapse",fontSize:11 }}>
+                            <thead><tr style={{ background:T.bg2,position:"sticky",top:0 }}>
+                              {["날짜","적요","입금","출금","잔액","상태"].map(col=>(
+                                <th key={col} style={{ padding:"5px 8px",textAlign:["입금","출금","잔액"].includes(col)?"right":"left",color:T.muted,fontWeight:700,borderBottom:`1px solid ${T.border}` }}>{col}</th>
+                              ))}
+                            </tr></thead>
+                            <tbody>
+                              {f.allTxns
+                                .filter(t => filterType==="전체"||(filterType==="입금"&&t.inAmt>0)||(filterType==="출금"&&t.outAmt>0))
+                                .map((t,i) => {
+                                  const isNew = f.newTxns.some(n=>n._uid_key===t._uid_key);
+                                  return (
+                                    <tr key={i} style={{ borderBottom:`1px solid ${T.border}`,background:i%2===0?T.bg2:T.bg3,opacity:isNew?1:0.45 }}>
+                                      <td style={{ padding:"5px 8px",color:T.muted,whiteSpace:"nowrap" }}>{(t.date||"").slice(0,10)}</td>
+                                      <td style={{ padding:"5px 8px",color:T.text,maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{t.desc||"-"}</td>
+                                      <td style={{ padding:"5px 8px",textAlign:"right",color:T.ok,fontWeight:t.inAmt>0?700:400 }}>{t.inAmt>0?t.inAmt.toLocaleString("ko-KR"):""}</td>
+                                      <td style={{ padding:"5px 8px",textAlign:"right",color:T.danger,fontWeight:t.outAmt>0?700:400 }}>{t.outAmt>0?t.outAmt.toLocaleString("ko-KR"):""}</td>
+                                      <td style={{ padding:"5px 8px",textAlign:"right",color:T.muted }}>{t.balance>0?t.balance.toLocaleString("ko-KR"):""}</td>
+                                      <td style={{ padding:"5px 8px",textAlign:"center" }}>
+                                        <span style={{ fontSize:10,color:isNew?T.ok:T.muted,fontWeight:700 }}>{isNew?"NEW":"중복"}</span>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {phase === "saved" && (
+          <div style={{ background:T.ok+"18",border:`1px solid ${T.ok}`,borderRadius:10,padding:"14px 16px",marginBottom:14,textAlign:"center" }}>
+            <div style={{ fontSize:22,marginBottom:4 }}>✅</div>
+            <div style={{ fontWeight:800,color:T.ok,fontSize:14 }}>저장 완료!</div>
+            <div style={{ fontSize:12,color:T.muted,marginTop:4 }}>입출금 내역이 누적 저장되고 계좌 잔액이 자동 갱신되었습니다.</div>
+          </div>
+        )}
+
+        <div style={{ display:"flex",gap:10,justifyContent:"flex-end",marginTop:4 }}>
+          <button onClick={onClose} style={{ background:"none",border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 18px",fontSize:13,fontWeight:700,cursor:"pointer",color:T.sub }}>
+            {phase==="saved"?"닫기":"취소"}
+          </button>
+          {pendingFiles.length > 0 && phase !== "saved" && (
+            <button onClick={saveAll} disabled={phase==="saving"||totalNew===0}
+              style={{ background:totalNew>0?T.ok:"#888",color:"#fff",border:"none",borderRadius:8,padding:"10px 18px",fontSize:13,fontWeight:700,cursor:totalNew>0?"pointer":"not-allowed" }}>
+              {phase==="saving"?"저장 중...":`💾 신규 ${totalNew}건 저장 + 잔액 갱신`}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── 메인 앱 ─────────────────────────────────────────────────
 function FinanceApp({ user }) {
   useEffect(()=>{
@@ -1119,6 +1463,7 @@ function FinanceApp({ user }) {
   const [showMemoModal, setShowMemoModal] = useState(false);
   const [showCardModal, setShowCardModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showBankUploadModal, setShowBankUploadModal] = useState(false);
   const [showCostModal, setShowCostModal] = useState(false);
   const [editCost, setEditCost] = useState(null);
   const [showAccountModal, setShowAccountModal] = useState(false);
@@ -1337,6 +1682,12 @@ function FinanceApp({ user }) {
           saveToFirebase(updatedCards, costs, dark, accounts, loans);
         }}
         onClose={()=>setShowUploadModal(false)}/>}
+      {showBankUploadModal && <BankUploadModal T={T} accounts={accounts} uid={user.uid}
+        onUpdateAccounts={updatedAccounts=>{
+          setAccounts(updatedAccounts);
+          saveToFirebase(cards, costs, dark, updatedAccounts, loans);
+        }}
+        onClose={()=>setShowBankUploadModal(false)}/>}
       {(showCardModal||editCard) && (
         <CardModal card={editCard} T={T}
           onSave={c=>{ if(editCard) updateCards(p=>p.map(x=>x.id===c.id?c:x)); else updateCards(p=>[...p,c]); setShowCardModal(false);setEditCard(null); }}
@@ -1808,7 +2159,10 @@ function FinanceApp({ user }) {
                   </div>
                 ))}
               </div>
-              <button onClick={()=>setShowAccountModal(true)} style={{ background:T.acc,color:"#fff",border:"none",borderRadius:8,padding:"10px 16px",fontSize:13,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" }}>+ 계좌 추가</button>
+              <div style={{ display:"flex",gap:8 }}>
+                <button onClick={()=>setShowBankUploadModal(true)} style={{ background:T.ok,color:"#fff",border:"none",borderRadius:8,padding:"10px 16px",fontSize:13,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" }}>📂 내역 업로드</button>
+                <button onClick={()=>setShowAccountModal(true)} style={{ background:T.acc,color:"#fff",border:"none",borderRadius:8,padding:"10px 16px",fontSize:13,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" }}>+ 계좌 추가</button>
+              </div>
             </div>
             <div style={{ marginBottom:14 }}>
               {accounts.map(a=>(

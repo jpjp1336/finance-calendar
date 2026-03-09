@@ -980,12 +980,8 @@ function FinanceApp({ user }) {
             ))}
           </div>
         )}
-      </div>
-    </div>
-  );
-}
 
-// ─── 루트 컴포넌트 ────────────────────────────────────────────
+        {/* ══════════════════ 계좌 관리 탭 ══════════════════ */}
         {tab==="계좌 관리" && (
           <div className="fu">
             {/* 요약 카드 */}
@@ -1001,8 +997,6 @@ function FinanceApp({ user }) {
                 </div>
               ))}
             </div>
-
-            {/* 계좌 목록 */}
             <div style={{ marginBottom:14 }}>
               {accounts.map(a=>(
                 <div key={a.id} style={{ background:T.bg2,border:`1px solid ${T.border}`,borderLeft:`4px solid ${a.color}`,borderRadius:12,padding:16,marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
@@ -1013,10 +1007,7 @@ function FinanceApp({ user }) {
                   <div style={{ display:"flex",alignItems:"center",gap:12 }}>
                     <div style={{ fontSize:22,fontWeight:400,color:a.balance>=0?T.ok:T.danger,...numFont }}>₩{fmt(a.balance)}</div>
                     <div style={{ display:"flex",gap:6 }}>
-                      <button onClick={()=>{
-                        const v = prompt(`${a.name} 잔액 수정 (원):`, a.balance);
-                        if(v!==null && v!=="") updateAccounts(p=>p.map(x=>x.id===a.id?{...x,balance:Number(v)}:x));
-                      }} style={{ background:T.acc,color:"#fff",border:"none",borderRadius:6,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer" }}>잔액 수정</button>
+                      <button onClick={()=>{const v=prompt(`${a.name} 잔액 수정 (원):`,a.balance);if(v!==null&&v!=="")updateAccounts(p=>p.map(x=>x.id===a.id?{...x,balance:Number(v)}:x));}} style={{ background:T.acc,color:"#fff",border:"none",borderRadius:6,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer" }}>잔액 수정</button>
                       <button onClick={()=>setEditAccount(a)} style={{ background:T.bg3,color:T.text,border:`1px solid ${T.border}`,borderRadius:6,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer" }}>수정</button>
                       <button onClick={()=>{if(window.confirm(`${a.name} 계좌를 삭제할까요?`))updateAccounts(p=>p.filter(x=>x.id!==a.id));}} style={{ background:T.danger,color:"#fff",border:"none",borderRadius:6,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer" }}>삭제</button>
                     </div>
@@ -1024,10 +1015,7 @@ function FinanceApp({ user }) {
                 </div>
               ))}
             </div>
-
             <button onClick={()=>setShowAccountModal(true)} style={{ width:"100%",padding:"13px",background:"none",border:`1.5px dashed ${T.border2}`,borderRadius:12,cursor:"pointer",fontSize:14,color:T.acc,fontWeight:700 }}>+ 계좌 추가</button>
-
-            {/* 안내 */}
             <div style={{ marginTop:16,background:dark?"#0A1020":"#EFF6FF",border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 16px",fontSize:12,color:T.sub,lineHeight:1.7 }}>
               <div>{"💡 "}잔액 계산 방법</div>
               <div style={{marginTop:4}}>전체 계좌 잔액 합계를 가계부의 시작 잔액으로 사용합니다.</div>

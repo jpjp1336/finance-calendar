@@ -1554,22 +1554,28 @@ function FinanceApp({ user }) {
   const [editLoan, setEditLoan]       = useState(null);
 
   // ── Firebase 데이터 로드 ──
+  // 1단계: settings/memos/paidItems 로드 → 즉시 화면 표시
+  // 2단계: cardTxnDB 백그라운드 로드 (용량이 커서 분리)
   useEffect(() => {
     const load = async () => {
       try {
-        const snap = await getDoc(doc(db, "users", user.uid, "data", "settings"));
         const isOwner = user.uid === OWNER_UID;
+        // 가벼운 데이터 먼저 동시 로드
+        const [snap, memoSnap, paidSnap] = await Promise.all([
+          getDoc(doc(db, "users", user.uid, "data", "settings")),
+          getDoc(doc(db, "users", user.uid, "data", "memos")),
+          getDoc(doc(db, "users", user.uid, "data", "paidItems")),
+        ]);
+
         if (snap.exists()) {
           const d = snap.data();
           let loadedCards = d.cards || (isOwner ? OWNER_CARDS : DEFAULT_CARDS);
           const loadedLoans = d.loans || (isOwner ? OWNER_LOANS : DEFAULT_LOANS);
-          // billing은 txnDB에서 동적 계산하므로 하드코딩 동기화 불필요
           setCards(loadedCards);
           if (d.costs)    setCosts(d.costs);
           if (d.accounts) setAccounts(d.accounts);
           setLoans(loadedLoans);
           if (d.dark !== undefined) setDark(d.dark);
-          // cards나 loans가 없었으면 or billing 동기화 후 바로 Firebase에 저장
           if (!d.cards || !d.loans) {
             const cardsToSave = loadedCards.map(({billing:_, ...rest}) => rest);
             await setDoc(doc(db, "users", user.uid, "data", "settings"), {
@@ -1580,17 +1586,20 @@ function FinanceApp({ user }) {
           setCards(OWNER_CARDS);
           setLoans(OWNER_LOANS);
         }
-        const memoSnap = await getDoc(doc(db, "users", user.uid, "data", "memos"));
-        if (memoSnap.exists()) setMemos(memoSnap.data().entries || {});
-        const paidSnap = await getDoc(doc(db, "users", user.uid, "data", "paidItems"));
-        if (paidSnap.exists()) setPaidItems(paidSnap.data().items || {});
 
-        // cardTxnDB 로드 + billing 자동 재계산
+        if (memoSnap.exists()) setMemos(memoSnap.data().entries || {});
+        if (paidSnap.exists()) setPaidItems(paidSnap.data().items || {});
+      } catch(e) { console.error(e); }
+
+      // ✅ 여기서 로딩 해제 → 즉시 화면 표시
+      setLoadingData(false);
+
+      // cardTxnDB는 백그라운드에서 별도 로드
+      try {
         const txnSnap = await getDoc(doc(db, "users", user.uid, "data", "cardTxnDB"));
         const txns = txnSnap.exists() ? (txnSnap.data().txns || []) : [];
         setCardTxnDB(txns);
-      } catch(e) { console.error(e); }
-      setLoadingData(false);
+      } catch(e) { console.error("cardTxnDB 로드 실패:", e); }
     };
     load();
   }, [user.uid]);

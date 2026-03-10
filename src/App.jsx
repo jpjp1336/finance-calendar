@@ -837,7 +837,7 @@ function calcBillingFromDB(txns, cardId, payDay, cardCompany) {
   return total;
 }
 
-function CardUploadModal({ T, cards, uid, onUpdateCards, onClose }) {
+function CardUploadModal({ T, cards, uid, onUpdateCards, onClose, initialDB }) {
   const [phase, setPhase]       = useState("loading"); // loading|idle|parsing|preview|saving|saved|error
   const [existingDB, setExistingDB] = useState([]);    // 기존 Firebase 거래 배열
   const [pendingFiles, setPendingFiles] = useState([]); // 파싱된 파일 결과 목록
@@ -857,8 +857,13 @@ function CardUploadModal({ T, cards, uid, onUpdateCards, onClose }) {
 
   const inp = { width:"100%", background:T.inp, border:`1px solid ${T.border}`, borderRadius:8, padding:"9px 12px", color:T.text, fontSize:13, fontFamily:"inherit", boxSizing:"border-box" };
 
-  // 1. 기존 DB 로드
+  // 1. 기존 DB 로드 (앱 레벨 캐시 우선 사용)
   useEffect(() => {
+    if (initialDB && initialDB.length > 0) {
+      setExistingDB(initialDB);
+      setPhase("idle");
+      return;
+    }
     (async () => {
       try {
         const snap = await getDoc(doc(db, "users", uid, "data", "cardTxnDB"));
@@ -978,8 +983,11 @@ function CardUploadModal({ T, cards, uid, onUpdateCards, onClose }) {
   // 전체 DB 통계 (카드별)
   const dbStats = cards.map(c => {
     const cTxns = existingDB.filter(t => t.cardId === c.id);
-    return { ...c, count: cTxns.length, billing: calcBillingFromDB(existingDB, c.id, c.payDay, c.company) };
-  }).filter(c => c.count > 0);
+    const lastDate = cTxns.length > 0
+      ? cTxns.reduce((mx, t) => (t.date||"") > mx ? (t.date||"") : mx, "")
+      : null;
+    return { ...c, count: cTxns.length, lastDate, billing: calcBillingFromDB(existingDB, c.id, c.payDay, c.company) };
+  }); // filter 제거 — 미업로드 카드도 표시
 
   const totalNewTxns = pendingFiles.filter(f=>!f.error).reduce((s,f)=>(s + (f.newTxns?.length||0)),0);
   const totalDupTxns = pendingFiles.filter(f=>!f.error).reduce((s,f)=>(s + (f.dupTxns?.length||0)),0);
@@ -999,15 +1007,20 @@ function CardUploadModal({ T, cards, uid, onUpdateCards, onClose }) {
         </div>
 
         {/* 현재 DB 현황 */}
-        {phase !== "loading" && existingDB.length > 0 && (
+        {phase !== "loading" && (
           <div style={{ background:T.bg3,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px 14px",marginBottom:14,marginTop:10 }}>
-            <div style={{ fontSize:11,fontWeight:700,color:T.muted,marginBottom:8 }}>📊 현재 누적 DB ({existingDB.length.toLocaleString()}건)</div>
+            <div style={{ fontSize:11,fontWeight:700,color:T.muted,marginBottom:8 }}>📊 카드별 업로드 현황 (누적 {existingDB.length.toLocaleString()}건)</div>
             <div style={{ display:"flex",flexWrap:"wrap",gap:6 }}>
               {dbStats.map(c=>(
-                <div key={c.id} onClick={()=>setViewCard(viewCard===c.id?null:c.id)} style={{ background:T.bg2,border:`1px solid ${c.color}44`,borderLeft:`3px solid ${c.color}`,borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:11 }}>
+                <div key={c.id} onClick={()=>c.count>0&&setViewCard(viewCard===c.id?null:c.id)}
+                  style={{ background:T.bg2,border:`1px solid ${c.count>0?c.color+"44":T.border}`,borderLeft:`3px solid ${c.count>0?c.color:T.muted}`,borderRadius:6,padding:"5px 10px",cursor:c.count>0?"pointer":"default",fontSize:11,opacity:c.count>0?1:0.5 }}>
                   <span style={{ fontWeight:700,color:T.text }}>{c.company}</span>
-                  <span style={{ color:T.muted,marginLeft:6 }}>{c.count}건</span>
-                  <span style={{ color:T.warn,fontWeight:700,marginLeft:6 }}>₩ {c.billing.toLocaleString("ko-KR")}</span>
+                  {c.count > 0 ? (<>
+                    <span style={{ color:T.muted,marginLeft:6 }}>{c.count}건</span>
+                    <span style={{ color:T.ok,marginLeft:6,fontWeight:700 }}>~{c.lastDate}</span>
+                  </>) : (
+                    <span style={{ color:T.muted,marginLeft:6 }}>미업로드</span>
+                  )}
                 </div>
               ))}
             </div>
@@ -1355,7 +1368,7 @@ function BankUploadModal({ T, accounts, uid, onUpdateAccounts, onClose }) {
 
         {phase !== "loading" && dbStats.length > 0 && (
           <div style={{ background:T.bg3,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px 14px",marginBottom:14,marginTop:10 }}>
-            <div style={{ fontSize:11,fontWeight:700,color:T.muted,marginBottom:8 }}>📊 현재 누적 DB ({existingDB.length.toLocaleString()}건)</div>
+            <div style={{ fontSize:11,fontWeight:700,color:T.muted,marginBottom:8 }}>📊 카드별 업로드 현황 (누적 {existingDB.length.toLocaleString()}건)</div>
             <div style={{ display:"flex",flexWrap:"wrap",gap:6 }}>
               {dbStats.map(a=>(
                 <div key={a.id} style={{ background:T.bg2,border:`1px solid ${a.color}44`,borderLeft:`3px solid ${a.color}`,borderRadius:6,padding:"5px 10px",fontSize:11 }}>
@@ -1518,6 +1531,7 @@ function FinanceApp({ user }) {
   const [costs, setCosts]     = useState(DEFAULT_COSTS);
   const [accounts, setAccounts] = useState(DEFAULT_ACCOUNTS);
   const [memos, setMemos]     = useState({});
+  const [paidItems, setPaidItems] = useState({}); // 납부완료 항목 {evId: true}
   const [saving, setSaving]   = useState(false);
   const [loadingData, setLoadingData] = useState(true);
 
@@ -1568,6 +1582,8 @@ function FinanceApp({ user }) {
         }
         const memoSnap = await getDoc(doc(db, "users", user.uid, "data", "memos"));
         if (memoSnap.exists()) setMemos(memoSnap.data().entries || {});
+        const paidSnap = await getDoc(doc(db, "users", user.uid, "data", "paidItems"));
+        if (paidSnap.exists()) setPaidItems(paidSnap.data().items || {});
 
         // cardTxnDB 로드 + billing 자동 재계산
         const txnSnap = await getDoc(doc(db, "users", user.uid, "data", "cardTxnDB"));
@@ -1594,6 +1610,20 @@ function FinanceApp({ user }) {
     try { await setDoc(doc(db,"users",user.uid,"data","memos"),{ entries:newMemos }); }
     catch(e) { console.error(e); }
   }, [user.uid]);
+
+  const savePaidItems = useCallback(async (items) => {
+    try { await setDoc(doc(db,"users",user.uid,"data","paidItems"),{ items }); }
+    catch(e) { console.error(e); }
+  }, [user.uid]);
+
+  const togglePaid = (evId) => {
+    setPaidItems(prev => {
+      const next = { ...prev };
+      if (next[evId]) delete next[evId]; else next[evId] = true;
+      savePaidItems(next);
+      return next;
+    });
+  };
 
   const updateCards = (fn) => {
     setCards(prev => { const n = typeof fn==="function"?fn(prev):fn; saveToFirebase(n,costs,dark,accounts,loans); return n; });
@@ -1626,25 +1656,33 @@ function FinanceApp({ user }) {
     const map = {};
     const add = (day, ev) => { if(day>=1&&day<=daysInMonth){if(!map[day])map[day]=[];map[day].push(ev);} };
 
+    const mmStr = `${calYear}-${String(calMonth+1).padStart(2,"0")}`;
     if (filter.card) computedCards.forEach(c => {
       const day = adjustToWeekday(calYear, calMonth, Math.min(c.payDay, daysInMonth), daysInMonth);
-      add(day, { type:"card", color:c.color, icon:"💳", label:c.company, amount:c.billing, detail:`결제 ₩${fmt(c.billing)} · 한도 ₩${fmt(c.limit)}` });
+      const evId = `card_${c.id}_${mmStr}-${String(day).padStart(2,"0")}`;
+      if (!paidItems[evId])
+        add(day, { type:"card", evId, color:c.color, icon:"💳", label:c.company, amount:c.billing, detail:`결제 ₩${fmt(c.billing)} · 한도 ₩${fmt(c.limit)}` });
     });
 
     if (filter.loan) loansWS.forEach(loan => {
       (loan.schedule||[]).forEach(s => {
         const [y,m,d] = s.date.split("-").map(Number);
-        if (y===calYear && m===calMonth+1 && d>=1 && d<=daysInMonth)
-          add(d, { type:s.principal>0?"loan":"interest", color:loan.color, icon:s.principal>0?"🏦":"💸",
-            label:loan.name.length>9?loan.name.slice(0,9)+"…":loan.name, fullLabel:loan.name,
-            amount:s.total, principal:s.principal, interest:s.interest, balance:s.balance,
-            detail:s.principal>0?`원금 ₩${fmt(s.principal)} + 이자 ₩${fmt(s.interest)}`:`이자만 ₩${fmt(s.interest)}` });
+        if (y===calYear && m===calMonth+1 && d>=1 && d<=daysInMonth) {
+          const evId = `loan_${loan.id}_${s.date}`;
+          if (!paidItems[evId])
+            add(d, { type:s.principal>0?"loan":"interest", evId, color:loan.color, icon:s.principal>0?"🏦":"💸",
+              label:loan.name.length>9?loan.name.slice(0,9)+"…":loan.name, fullLabel:loan.name,
+              amount:s.total, principal:s.principal, interest:s.interest, balance:s.balance,
+              detail:s.principal>0?`원금 ₩${fmt(s.principal)} + 이자 ₩${fmt(s.interest)}`:`이자만 ₩${fmt(s.interest)}` });
+        }
       });
     });
 
     if (filter.cost) costs.forEach(c => {
       const day = adjustToWeekday(calYear, calMonth, Math.min(c.payDay, daysInMonth), daysInMonth);
-      add(day, { type:"cost", color:c.color, icon:"🏢", label:c.name, amount:c.amount, detail:`${c.category} · ₩${fmt(c.amount)}` });
+      const evId = `cost_${c.id}_${mmStr}-${String(day).padStart(2,"0")}`;
+      if (!paidItems[evId])
+        add(day, { type:"cost", evId, color:c.color, icon:"🏢", label:c.name, amount:c.amount, detail:`${c.category} · ₩${fmt(c.amount)}` });
     });
 
     if (filter.memo) Object.entries(memos).forEach(([dateStr, entries]) => {
@@ -1654,7 +1692,7 @@ function FinanceApp({ user }) {
     });
 
     return map;
-  }, [computedCards, loansWS, costs, memos, calYear, calMonth, filter, daysInMonth]);
+  }, [computedCards, loansWS, costs, memos, calYear, calMonth, filter, daysInMonth, paidItems]);
 
   // ── 월 합계 ──
   const monthTotal = useMemo(() => {
@@ -1698,7 +1736,12 @@ function FinanceApp({ user }) {
         });
       });
     }
-    rows.sort((a,b)=>a.day-b.day);
+    // 같은 날짜면 입금(income>0) 우선, 그 다음 대출원리금/카드, 마지막 지출
+    rows.sort((a,b) => {
+      if (a.day !== b.day) return a.day - b.day;
+      const rank = r => r.income > 0 ? 0 : r.type==="memo" ? 2 : 1;
+      return rank(a) - rank(b);
+    });
     // 잔액 = 전체 계좌 합산 잔액에서 시작
     const startBal = accounts.reduce((s,a)=>s+a.balance,0);
     let bal = startBal;
@@ -1754,7 +1797,7 @@ function FinanceApp({ user }) {
           onSave={a=>{ if(editAccount) updateAccounts(p=>p.map(x=>x.id===a.id?a:x)); else updateAccounts(p=>[...p,a]); setShowAccountModal(false);setEditAccount(null); }}
           onClose={()=>{setShowAccountModal(false);setEditAccount(null);}}/>
       )}
-      {showUploadModal && <CardUploadModal T={T} cards={cards} uid={user.uid}
+      {showUploadModal && <CardUploadModal T={T} cards={cards} uid={user.uid} initialDB={cardTxnDB}
         onUpdateCards={(updatedCards, deduped)=>{
           setCards(updatedCards);
           if (deduped) setCardTxnDB(deduped); // 앱 레벨 txnDB 갱신 → computedCards 자동 재계산
@@ -1920,6 +1963,50 @@ function FinanceApp({ user }) {
                       )}
                     </div>
                     <button onClick={()=>setShowMemoModal(true)} style={{ width:"100%",background:T.ok,color:"#fff",border:"none",borderRadius:8,padding:"8px",fontSize:12,fontWeight:700,cursor:"pointer",marginBottom:12 }}>+ 수입/지출 추가</button>
+                    {/* 완료된 항목 목록 계산 */}
+                    {(() => {
+                      const mmStr = `${calYear}-${String(calMonth+1).padStart(2,"0")}`;
+                      const dayStr = `${mmStr}-${String(selectedDay).padStart(2,"0")}`;
+                      const paidEvs = [];
+                      computedCards.forEach(c => {
+                        const day = adjustToWeekday(calYear, calMonth, Math.min(c.payDay, daysInMonth), daysInMonth);
+                        if (day === selectedDay) {
+                          const evId = `card_${c.id}_${dayStr}`;
+                          if (paidItems[evId]) paidEvs.push({ evId, icon:"💳", label:c.company, amount:c.billing, color:c.color });
+                        }
+                      });
+                      loansWS.forEach(loan => {
+                        (loan.schedule||[]).forEach(s => {
+                          const [y,m,d] = s.date.split("-").map(Number);
+                          if (y===calYear && m===calMonth+1 && d===selectedDay) {
+                            const evId = `loan_${loan.id}_${s.date}`;
+                            if (paidItems[evId]) paidEvs.push({ evId, icon:"🏦", label:loan.name, amount:s.total, color:loan.color });
+                          }
+                        });
+                      });
+                      costs.forEach(c => {
+                        const day = adjustToWeekday(calYear, calMonth, Math.min(c.payDay, daysInMonth), daysInMonth);
+                        if (day === selectedDay) {
+                          const evId = `cost_${c.id}_${dayStr}`;
+                          if (paidItems[evId]) paidEvs.push({ evId, icon:"🏢", label:c.name, amount:c.amount, color:c.color });
+                        }
+                      });
+                      if (!paidEvs.length) return null;
+                      return (
+                        <div style={{ marginBottom:8 }}>
+                          <div style={{ fontSize:10,fontWeight:700,color:T.ok,marginBottom:4 }}>✓ 납부 완료</div>
+                          {paidEvs.map(ev => (
+                            <div key={ev.evId} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 10px",background:T.ok+"18",border:`1px solid ${T.ok}44`,borderLeft:`3px solid ${T.ok}`,borderRadius:8,marginBottom:4,opacity:0.7 }}>
+                              <span style={{ fontSize:11,color:T.ok,fontWeight:700 }}>{ev.icon} {ev.label}</span>
+                              <div style={{ display:"flex",alignItems:"center",gap:6 }}>
+                                <span style={{ fontSize:11,color:T.ok,...numFont }}>₩{fmt(ev.amount)}</span>
+                                <button onClick={()=>togglePaid(ev.evId)} style={{ background:"none",border:`1px solid ${T.muted}`,borderRadius:4,padding:"1px 5px",fontSize:9,color:T.muted,cursor:"pointer" }}>취소</button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                     {(calEvents[selectedDay]||[]).length===0 && <div style={{ textAlign:"center",color:T.muted,fontSize:12,padding:"16px 0" }}>이 날 일정이 없습니다.</div>}
                     <div style={{ display:"flex",flexDirection:"column",gap:6,maxHeight:500,overflowY:"auto" }}>
                       {(calEvents[selectedDay]||[]).map((ev,i)=>(
@@ -1941,6 +2028,12 @@ function FinanceApp({ user }) {
                                   if(!nm[key].length) delete nm[key];
                                   setMemos(nm); saveMemos(nm);
                                 }} style={{ background:"none",border:`1px solid ${T.danger}`,borderRadius:5,padding:"2px 6px",fontSize:10,color:T.danger,cursor:"pointer" }}>삭제</button>
+                              )}
+                              {(ev.type==="card"||ev.type==="loan"||ev.type==="interest"||ev.type==="cost")&&ev.evId&&(
+                                <button onClick={()=>togglePaid(ev.evId)}
+                                  style={{ background:T.ok,color:"#fff",border:"none",borderRadius:5,padding:"2px 8px",fontSize:10,fontWeight:700,cursor:"pointer" }}>
+                                  ✓ 완료
+                                </button>
                               )}
                             </div>
                           </div>
